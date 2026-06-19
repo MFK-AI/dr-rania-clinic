@@ -66,3 +66,15 @@
 - [x] Integrate VoiceRecorder into Visit Form (dictate visit notes)
 - [x] Add mic permission error handling and browser compatibility guard
 - [x] Test end-to-end: record → transcribe → populate text field
+
+## Universal AI-Assisted Input (All Forms)
+- [x] Backend: screenshot OCR + AI patient-data extraction endpoint (ai.extractFromImage)
+- [x] Backend: text-paste AI patient-data extraction endpoint (ai.extractFromText for patient fields)
+- [x] Backend: screenshot OCR + AI visit-data extraction endpoint (ai.extractVisitFromImage)
+- [x] Build AIAssistPanel component (form-level: voice + screenshot upload + text paste → auto-fill)
+- [x] Integrate AIAssistPanel into PatientForm (new patient + edit patient)
+- [x] Integrate AIAssistPanel into VisitForm (new visit + edit visit)
+- [x] Every text/textarea field gets inline mic icon for per-field voice dictation
+- [x] Screenshot upload supports camera capture on mobile (accept="image/*,capture")
+- [x] AI extraction result preview before applying to form (confirm/edit before auto-fill)
+- [x] Test all four contexts: new patient, edit patient, new visit, edit visit

@@ -326,6 +326,170 @@ export const aiRouter = router({
 
       return { success: true };
     }),
+
+  // ── Extract PATIENT data from a screenshot / image ─────────────────────────
+  extractPatientFromImage: protectedProcedure
+    .input(z.object({ imageUrl: z.string().url() }))
+    .mutation(async ({ ctx, input }) => {
+      requireDoctorOrAssistant(ctx.user.role);
+      const systemPrompt = `You are a medical data extraction assistant for an OB-GYN clinic.
+Extract ALL patient demographic and medical history information from the provided image.
+The image may be a handwritten form, printed form, screenshot, or any clinical document.
+Return ONLY a valid JSON object with these exact keys (use null for missing fields, no extra keys):
+{
+  "name": null,
+  "phone": null,
+  "dateOfBirth": null,
+  "age": null,
+  "maritalStatus": null,
+  "pregnancyStatus": null,
+  "gravida": null,
+  "para": null,
+  "abortions": null,
+  "bloodType": null,
+  "allergies": null,
+  "chronicConditions": null,
+  "currentMedications": null,
+  "surgicalHistory": null,
+  "familyHistory": null,
+  "notes": null
+}
+For maritalStatus use one of: single, married, divorced, widowed, or null.
+For pregnancyStatus use one of: not_pregnant, pregnant, postpartum, or null.
+Do not include markdown, code fences, or any text outside the JSON object.`;
+      try {
+        const messages: Message[] = [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: input.imageUrl, detail: "high" } },
+              { type: "text", text: "Extract all patient information from this image." },
+            ],
+          },
+        ];
+        const response = await invokeLLM({ messages });
+        const raw = response.choices[0]?.message?.content;
+        const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
+        const cleaned = content.replace(/```json\n?|```/g, "").trim();
+        const extractedData = JSON.parse(cleaned) as Record<string, unknown>;
+        return { extractedData };
+      } catch {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not extract patient data from image. Please try a clearer image or enter data manually.",
+        });
+      }
+    }),
+
+  // ── Extract PATIENT data from pasted text / voice transcript ───────────────
+  extractPatientFromText: protectedProcedure
+    .input(z.object({ text: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      requireDoctorOrAssistant(ctx.user.role);
+      const systemPrompt = `You are a medical data extraction assistant for an OB-GYN clinic.
+Extract ALL patient demographic and medical history information from the provided text.
+The text may be a voice transcript, typed notes, or copied text from any source in Arabic or English.
+Return ONLY a valid JSON object with these exact keys (use null for missing fields, no extra keys):
+{
+  "name": null,
+  "phone": null,
+  "dateOfBirth": null,
+  "age": null,
+  "maritalStatus": null,
+  "pregnancyStatus": null,
+  "gravida": null,
+  "para": null,
+  "abortions": null,
+  "bloodType": null,
+  "allergies": null,
+  "chronicConditions": null,
+  "currentMedications": null,
+  "surgicalHistory": null,
+  "familyHistory": null,
+  "notes": null
+}
+For maritalStatus use one of: single, married, divorced, widowed, or null.
+For pregnancyStatus use one of: not_pregnant, pregnant, postpartum, or null.
+Do not include markdown, code fences, or any text outside the JSON object.`;
+      try {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: input.text },
+          ],
+        });
+        const raw = response.choices[0]?.message?.content;
+        const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
+        const cleaned = content.replace(/```json\n?|```/g, "").trim();
+        const extractedData = JSON.parse(cleaned) as Record<string, unknown>;
+        return { extractedData };
+      } catch {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not extract patient data from text. Please try again or enter data manually.",
+        });
+      }
+    }),
+
+  // ── Extract VISIT / CLINICAL data from a screenshot / image ────────────────
+  extractVisitFromImage: protectedProcedure
+    .input(
+      z.object({
+        imageUrl: z.string().url(),
+        visitDate: z.string().optional(),
+        visitLocation: z.enum(["Prime Hospital", "Mazher Center"]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      requireDoctorOrAssistant(ctx.user.role);
+      const systemPrompt = `You are an expert OB-GYN clinical data extraction assistant.
+Extract ALL clinical visit information from the provided image.
+The image may be handwritten notes, a printed form, a prescription, or any clinical document.
+Return ONLY a valid JSON object with these exact keys (use null for missing fields, no extra keys):
+{
+  "reason_for_visit": null,
+  "examination": null,
+  "ultrasound_findings": null,
+  "labs_imaging": null,
+  "pending_results": null,
+  "diagnosis": null,
+  "management_plan": null,
+  "medications": null,
+  "advice": null,
+  "follow_up_plan": null,
+  "visit_type": null,
+  "risk_flags": [],
+  "unclear_words_or_phrases": [],
+  "extraction_status": "Needs Review"
+}
+For visit_type use one of: new_patient, follow_up, emergency, procedure, prenatal, postnatal, or null.
+For extraction_status use: Clear, Needs Review, or Unclear.
+Do not include markdown, code fences, or any text outside the JSON object.`;
+      try {
+        const messages: Message[] = [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: input.imageUrl, detail: "high" } },
+              { type: "text", text: "Extract all clinical visit information from this image." },
+            ],
+          },
+        ];
+        const response = await invokeLLM({ messages });
+        const raw = response.choices[0]?.message?.content;
+        const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
+        const cleaned = content.replace(/```json\n?|```/g, "").trim();
+        const extractedData = JSON.parse(cleaned) as Record<string, unknown>;
+        return { extractedData };
+      } catch {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not extract visit data from image. Please try a clearer image or enter data manually.",
+        });
+      }
+    }),
 });
 
 // ─── Internal AI extraction helper ───────────────────────────────────────────
