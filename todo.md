@@ -58,3 +58,11 @@
 - [x] Integration tests: full voice → extraction → approval flow
 - [x] Fix all TypeScript errors (0 errors)
 - [x] Save checkpoint and deliver to user
+
+## Voice Recording Feature (Added Post-Launch)
+- [x] Build reusable VoiceRecorder component (MediaRecorder API, waveform, record/stop/replay)
+- [x] Add upload-then-transcribe flow (POST /api/storage/upload → ai.transcribeAudio)
+- [x] Integrate VoiceRecorder into AI Review page (voice note input)
+- [x] Integrate VoiceRecorder into Visit Form (dictate visit notes)
+- [x] Add mic permission error handling and browser compatibility guard
+- [x] Test end-to-end: record → transcribe → populate text field

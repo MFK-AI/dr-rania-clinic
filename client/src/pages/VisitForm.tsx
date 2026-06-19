@@ -5,9 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import VoiceRecorder, { type VoiceRecorderResult } from "@/components/VoiceRecorder";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Mic, MicOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 
@@ -43,6 +44,9 @@ export default function VisitForm() {
     advice: "",
     followUpPlan: "",
   });
+
+  // ── Voice recorder toggle ─────────────────────────────────────────────────
+  const [showVoice, setShowVoice] = useState(false);
 
   useEffect(() => {
     if (existing?.visit) {
@@ -85,6 +89,26 @@ export default function VisitForm() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  // ── Auto-fill form from AI voice extraction ───────────────────────────────
+  const handleVoiceResult = (result: VoiceRecorderResult) => {
+    const d = result.extractedData as Record<string, string | undefined>;
+    setForm((f) => ({
+      ...f,
+      reasonForVisit:    d["reason_for_visit"]   ?? f.reasonForVisit,
+      diagnosis:         d["diagnosis"]           ?? f.diagnosis,
+      examination:       d["examination"]         ?? f.examination,
+      ultrasoundFindings:d["ultrasound_findings"] ?? f.ultrasoundFindings,
+      labsImaging:       d["labs_imaging"]        ?? f.labsImaging,
+      pendingResults:    d["pending_results"]     ?? f.pendingResults,
+      managementPlan:    d["management_plan"]     ?? f.managementPlan,
+      medications:       d["medications"]         ?? f.medications,
+      advice:            d["advice"]              ?? f.advice,
+      followUpPlan:      d["follow_up_plan"]      ?? f.followUpPlan,
+    }));
+    setShowVoice(false);
+    toast.success("Voice note transcribed — fields pre-filled. Please review before saving.");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,9 +159,58 @@ export default function VisitForm() {
         <h1 className="text-2xl font-display font-semibold">
           {isEdit ? "Edit Visit" : "New Visit"}
         </h1>
+        <div className="ml-auto">
+          <Button
+            type="button"
+            variant={showVoice ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowVoice((v) => !v)}
+            className="gap-2"
+          >
+            {showVoice ? (
+              <>
+                <MicOff className="h-3.5 w-3.5" />
+                Hide Voice Input
+              </>
+            ) : (
+              <>
+                <Mic className="h-3.5 w-3.5" />
+                Dictate Notes
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
+      {/* ── Voice Recorder Card ─────────────────────────────────────────────── */}
+      {showVoice && (
+        <div className="mb-5">
+          <Card className="border-primary/40 shadow-md bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Mic className="h-4 w-4 text-primary" />
+                Dictate Visit Notes
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Speak your clinical notes in Arabic or English. AI will transcribe and
+                automatically fill in the form fields below. You can review and edit before saving.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <VoiceRecorder
+                patientId={form.patientId ? parseInt(form.patientId) : 0}
+                visitId={visitId ?? undefined}
+                onResult={handleVoiceResult}
+                onError={(msg) => toast.error(msg)}
+                language="ar"
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* ── Visit Details ──────────────────────────────────────────────────── */}
         <Card className="border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -205,6 +278,7 @@ export default function VisitForm() {
           </CardContent>
         </Card>
 
+        {/* ── Clinical Assessment ────────────────────────────────────────────── */}
         <Card className="border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -272,10 +346,11 @@ export default function VisitForm() {
           </CardContent>
         </Card>
 
+        {/* ── Management & Follow-up ─────────────────────────────────────────── */}
         <Card className="border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Management & Follow-up
+              Management &amp; Follow-up
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -324,7 +399,6 @@ export default function VisitForm() {
                 className="rounded-lg"
               />
             </div>
-
           </CardContent>
         </Card>
 
