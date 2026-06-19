@@ -12,6 +12,7 @@ import {
   updatePatient,
 } from "../db";
 import { logAuditEvent } from "../db";
+import { syncPatientToSheet } from "./sync";
 
 // Role guard helpers
 function requireDoctorOrAssistant(role: string) {
@@ -102,6 +103,8 @@ export const patientsRouter = router({
         entityId: id,
         metadata: { name: input.name, phone: input.phone },
       });
+      // Real-time sync to Google Sheets (non-blocking)
+      getPatientById(id).then((p) => { if (p) syncPatientToSheet(p).catch(() => {}); }).catch(() => {});
       return { id };
     }),
 
@@ -129,6 +132,8 @@ export const patientsRouter = router({
         entityId: input.id,
         metadata: { fields: Object.keys(input.data) },
       });
+      // Real-time sync to Google Sheets (non-blocking)
+      getPatientById(input.id).then((p) => { if (p) syncPatientToSheet(p).catch(() => {}); }).catch(() => {});
       return { success: true };
     }),
 

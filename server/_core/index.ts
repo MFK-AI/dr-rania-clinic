@@ -9,6 +9,9 @@ import { storagePut } from "../storage";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { sdk } from "./sdk";
+import { runFullDailySync } from "../routers/sync";
+import { formatDailySummary, sendTelegramMessage } from "../routers/telegram";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -60,6 +63,24 @@ async function startServer() {
     } catch (err) {
       console.error("[Upload] Error:", err);
       res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
+  // ─── Scheduled: Daily 7AM Dubai sync ─────────────────────────────────────
+  app.post("/api/scheduled/daily-sync", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      if (!user.isCron) return res.status(403).json({ error: "cron-only" });
+      // Run full sync
+      const result = await runFullDailySync();
+      // Send Telegram daily summary
+      const summary = await formatDailySummary();
+      await sendTelegramMessage(summary, "Markdown");
+      return res.json({ ok: true, synced: result });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[daily-sync] Error:", message);
+      return res.status(500).json({ error: message, timestamp: new Date().toISOString() });
     }
   });
 

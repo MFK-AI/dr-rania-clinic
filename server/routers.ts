@@ -9,6 +9,7 @@ import { filesRouter } from "./routers/files";
 import { patientsRouter } from "./routers/patients";
 import { remindersRouter } from "./routers/reminders";
 import { telegramRouter } from "./routers/telegram";
+import { syncRouter } from "./routers/sync";
 import { visitsRouter } from "./routers/visits";
 
 export const appRouter = router({
@@ -31,6 +32,7 @@ export const appRouter = router({
   admin: adminRouter,
   exports: exportsRouter,
   telegram: telegramRouter,
+  sync: syncRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -7,10 +7,13 @@ import {
   getRemindersByPatient,
   getTodaysReminders,
   getOverdueReminders,
+  getPatientById,
   logAuditEvent,
   updateReminderStatus,
 } from "../db";
 import { getDb } from "../db";
+import { syncReminderToSheet, createReminderCalendarEvent } from "./sync";
+import { sendTelegramAlert } from "./telegram";
 import { reminders } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -86,6 +89,22 @@ export const remindersRouter = router({
         entityId: id,
         metadata: { type: input.reminderType, dueDate: input.dueDate },
       });
+      // Non-blocking: sync to Sheets, Calendar, and Telegram
+      getPatientById(input.patientId).then((p) => {
+        if (!p) return;
+        getReminderById(id).then((r) => {
+          if (r) syncReminderToSheet(r, p.name, p.phone).catch(() => {});
+        }).catch(() => {});
+        createReminderCalendarEvent({
+          patientName: p.name,
+          patientPhone: p.phone,
+          reminderText: input.title,
+          dueDate: new Date(input.dueDate),
+        }).catch(() => {});
+        sendTelegramAlert(
+          `🔔 *New Reminder*\n👤 ${p.name} (${p.phone})\n📋 ${input.title}\n📅 Due: ${input.dueDate}\n🏷️ Type: ${input.reminderType}`
+        ).catch(() => {});
+      }).catch(() => {});
       return { id };
     }),
 

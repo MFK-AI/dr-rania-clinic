@@ -9,10 +9,12 @@ import {
   getVisitById,
   getVisitsByPatient,
   getVisitsThisWeek,
+  getPatientById,
   logAuditEvent,
   softDeleteVisit,
   updateVisit,
 } from "../db";
+import { syncVisitToSheet, createVisitCalendarEvent } from "./sync";
 
 function requireDoctorOrAssistant(role: string) {
   if (role !== "doctor" && role !== "assistant" && role !== "admin") {
@@ -87,6 +89,21 @@ export const visitsRouter = router({
         entityId: id,
         metadata: { patientId: input.patientId, visitDate: input.visitDate },
       });
+      // Real-time sync to Google Sheets + Calendar (non-blocking)
+      getPatientById(input.patientId).then((p) => {
+        if (!p) return;
+        getVisitById(id).then((v) => {
+          if (v) syncVisitToSheet(v, p.name, p.phone).catch(() => {});
+        }).catch(() => {});
+        createVisitCalendarEvent({
+          patientName: p.name,
+          patientPhone: p.phone,
+          visitType: input.visitType ?? "Consultation",
+          chiefComplaint: input.reasonForVisit,
+          location: input.visitLocation,
+          visitDate: new Date(input.visitDate),
+        }).catch(() => {});
+      }).catch(() => {});
       return { id };
     }),
 

@@ -432,6 +432,96 @@ Do not include markdown, code fences, or any text outside the JSON object.`;
       }
     }),
 
+  // ── AI Reminder Auto-Extraction from Visit Notes ────────────────────────────
+  extractRemindersFromVisit: protectedProcedure
+    .input(z.object({
+      visitId: z.number(),
+      patientId: z.number(),
+      visitDate: z.string(),
+      diagnosis: z.string().optional(),
+      examination: z.string().optional(),
+      labsImaging: z.string().optional(),
+      pendingResults: z.string().optional(),
+      managementPlan: z.string().optional(),
+      medications: z.string().optional(),
+      advice: z.string().optional(),
+      followUpPlan: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      requireDoctorOrAssistant(ctx.user.role);
+      const visitText = [
+        input.diagnosis ? `Diagnosis: ${input.diagnosis}` : "",
+        input.examination ? `Examination: ${input.examination}` : "",
+        input.labsImaging ? `Labs/Imaging: ${input.labsImaging}` : "",
+        input.pendingResults ? `Pending Results: ${input.pendingResults}` : "",
+        input.managementPlan ? `Management Plan: ${input.managementPlan}` : "",
+        input.medications ? `Medications: ${input.medications}` : "",
+        input.advice ? `Advice: ${input.advice}` : "",
+        input.followUpPlan ? `Follow-up Plan: ${input.followUpPlan}` : "",
+      ].filter(Boolean).join("\n");
+      if (!visitText.trim()) return { reminders: [] };
+      const today = new Date().toISOString().split("T")[0];
+      const systemPrompt = `You are a medical assistant AI for a gynaecology and obstetrics clinic in Dubai.
+Analyse the following clinical visit notes and extract ALL actionable reminders that the doctor or staff should follow up on.
+For each reminder, determine:
+- title: short action title (e.g. "Call patient for lab results", "Book ultrasound", "Medication review")
+- reminderType: one of: call_patient | inform_result | check_lab | check_imaging | follow_up | medication_review | procedure_booking | custom
+- dueDate: ISO date string (YYYY-MM-DD) relative to visit date ${input.visitDate}. If the text says "in 2 weeks" calculate from visit date.
+- notes: any extra context
+- priority: low | medium | high
+Return ONLY a valid JSON array of reminder objects. No explanation. No markdown. Example:
+[{"title":"Call for HbA1c result","reminderType":"inform_result","dueDate":"${today}","notes":"Check if result is back","priority":"high"}]`;
+      try {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: visitText },
+          ],
+        });
+        const raw = response.choices[0]?.message?.content;
+        const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "[]");
+        const cleaned = content.replace(/```json\n?|```/g, "").trim();
+        const parsed = JSON.parse(cleaned) as Array<{
+          title: string;
+          reminderType: string;
+          dueDate: string;
+          notes?: string;
+          priority?: string;
+        }>;
+        // Persist extracted reminders to the database
+        const validTypes = [
+          "call_patient", "inform_result", "check_lab", "check_imaging",
+          "follow_up", "medication_review", "procedure_booking", "custom",
+        ] as const;
+        type ReminderType = typeof validTypes[number];
+        const savedIds: number[] = [];
+        for (const r of parsed) {
+          const rType: ReminderType = validTypes.includes(r.reminderType as ReminderType)
+            ? (r.reminderType as ReminderType)
+            : "custom";
+          try {
+            const reminderId = await createReminder({
+              patientId: input.patientId,
+              visitId: input.visitId,
+              reminderType: rType,
+              title: r.title,
+              notes: r.notes ?? null,
+              dueDate: r.dueDate,
+              status: "pending",
+              createdBy: ctx.user.id,
+              sourceText: `AI-extracted from visit ${input.visitId}`,
+            });
+            savedIds.push(reminderId);
+          } catch (err) {
+            console.error("[AI] Failed to save reminder:", err);
+          }
+        }
+        return { reminders: parsed, savedCount: savedIds.length };
+      } catch {
+        return { reminders: [], savedCount: 0 };
+      }
+    }),
+
   // ── Extract VISIT / CLINICAL data from a screenshot / image ────────────────
   extractVisitFromImage: protectedProcedure
     .input(

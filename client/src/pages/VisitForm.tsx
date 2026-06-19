@@ -177,10 +177,35 @@ export default function VisitForm() {
 
   const utils = trpc.useUtils();
 
+  const extractReminders = trpc.ai.extractRemindersFromVisit.useMutation({
+    onSuccess: (data) => {
+      const count = data.savedCount ?? 0;
+      if (count > 0) {
+        toast.success(`🔔 ${count} reminder${count > 1 ? 's' : ''} auto-saved from visit notes — check Reminders page`);
+      }
+    },
+  });
+
   const createVisit = trpc.visits.create.useMutation({
     onSuccess: (data) => {
       toast.success("Visit created successfully");
       utils.visits.listByPatient.invalidate({ patientId: parseInt(form.patientId) });
+      // Auto-extract reminders from clinical notes in background
+      if (form.diagnosis || form.pendingResults || form.followUpPlan || form.managementPlan) {
+        extractReminders.mutate({
+          visitId: data.id,
+          patientId: parseInt(form.patientId),
+          visitDate: form.visitDate,
+          diagnosis: form.diagnosis || undefined,
+          examination: form.examination || undefined,
+          labsImaging: form.labsImaging || undefined,
+          pendingResults: form.pendingResults || undefined,
+          managementPlan: form.managementPlan || undefined,
+          medications: form.medications || undefined,
+          advice: form.advice || undefined,
+          followUpPlan: form.followUpPlan || undefined,
+        });
+      }
       setLocation(`/visits/${data.id}`);
     },
     onError: (err) => toast.error(err.message),

@@ -78,3 +78,22 @@
 - [x] Screenshot upload supports camera capture on mobile (accept="image/*,capture")
 - [x] AI extraction result preview before applying to form (confirm/edit before auto-fill)
 - [x] Test all four contexts: new patient, edit patient, new visit, edit visit
+
+## Phase 7: External Integrations (Telegram, Google Sheets, Google Calendar, Domain)
+- [x] Store Telegram Bot Token and Chat ID as app secrets
+- [x] Wire Telegram router to send real messages via Telegram Bot API
+- [x] Send reminder alerts via Telegram (patient name, phone, what to remind)
+- [x] Send daily 7:00 AM Dubai time morning summary via Telegram
+- [x] Send new patient registration alert via Telegram
+- [x] Set up Google Sheets API integration (googleapis npm package)
+- [x] Authorize dr.raniakhalil83@gmail.com via Google OAuth service account or API key
+- [x] Create/update Google Sheet with all patient data in real-time on every save
+- [x] Daily 7:00 AM Dubai time full sync of all patients to Google Sheet
+- [x] Google Sheet columns: all patient fields + visit count + last visit date
+- [x] Build Google Calendar integration for dr.raniakhalil83@gmail.com
+- [x] Create Google Calendar event on new visit creation
+- [x] Create Google Calendar event for each reminder (with alarm)
+- [x] AI auto-extraction of reminders from patient data and visit notes
+- [x] Expand visit form: add diagnosis fields, lab results, medical questions with AI input
+- [x] Configure domain drmousa.clinic (user must bind via Settings → Domains after publish)
+- [x] Run full test suite and save checkpoint (41/41 passing)
