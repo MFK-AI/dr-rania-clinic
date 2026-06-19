@@ -18,7 +18,8 @@ export default function Login() {
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
-      await utils.auth.me.invalidate();
+      // Refetch auth.me so AuthGate sees the user before we navigate
+      await utils.auth.me.refetch();
       navigate("/");
     },
     onError: (err) => {
