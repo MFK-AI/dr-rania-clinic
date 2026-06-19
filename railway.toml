@@ -3,9 +3,7 @@ builder = "nixpacks"
 buildCommand = "pnpm install --frozen-lockfile && pnpm run build"
 
 [deploy]
-startCommand = "node dist/server/_core/index.js"
-healthcheckPath = "/api/trpc/system.health"
-healthcheckTimeout = 30
+startCommand = "node dist/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
