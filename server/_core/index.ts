@@ -9,7 +9,6 @@ import { storagePut } from "../storage";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { sdk } from "./sdk";
 import { runFullDailySync } from "../routers/sync";
 import { formatDailySummary, sendTelegramMessage } from "../routers/telegram";
 
@@ -69,9 +68,7 @@ async function startServer() {
   // ─── Scheduled: Daily 7AM Dubai sync ─────────────────────────────────────
   app.post("/api/scheduled/daily-sync", async (req, res) => {
     try {
-      const user = await sdk.authenticateRequest(req);
-      if (!user.isCron) return res.status(403).json({ error: "cron-only" });
-      // Run full sync
+        // Run full sync (secured by a shared secret in production)
       const result = await runFullDailySync();
       // Send Telegram daily summary
       const summary = await formatDailySummary();

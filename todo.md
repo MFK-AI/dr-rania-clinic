@@ -97,3 +97,17 @@
 - [x] Expand visit form: add diagnosis fields, lab results, medical questions with AI input
 - [x] Configure domain drmousa.clinic (user must bind via Settings → Domains after publish)
 - [x] Run full test suite and save checkpoint (41/41 passing)
+
+## Phase 8: Standalone Deployment Migration
+
+- [x] Replace Manus OAuth with custom email/password auth (bcrypt + JWT cookies)
+- [x] Create custom /api/auth/login, /api/auth/logout, /api/auth/me endpoints (via tRPC auth router)
+- [x] Seed Dr. Rania Khalil as admin user (dr.raniakhalil83@gmail.com)
+- [x] Replace frontend useAuth Manus hook with custom AuthContext
+- [x] Build standalone Login page (email + password, no Manus dependency)
+- [ ] Remove all Manus SDK imports and VITE_OAUTH_PORTAL_URL references
+- [ ] Add Railway deployment config (railway.toml)
+- [ ] Write .env.example with all required environment variables
+- [ ] Push to private GitHub repo under @MFK-AI
+- [ ] Run full test suite and save checkpoint
+- [ ] Deliver step-by-step deployment guide for Railway + Netlify + drmousa.clinic
