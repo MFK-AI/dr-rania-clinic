@@ -151,10 +151,10 @@ function DashboardLayoutContent({
               {!isCollapsed && (
                 <div className="min-w-0">
                   <p className="text-sm font-display font-semibold text-sidebar-foreground truncate">
-                    Dr. Rania
+                    Dr. Rania Khalil
                   </p>
                   <p className="text-xs text-sidebar-foreground/50 truncate">
-                    Patient Intelligence
+                    drmousa.clinic
                   </p>
                 </div>
               )}

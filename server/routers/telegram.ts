@@ -111,7 +111,7 @@ export async function formatDailySummary(): Promise<string> {
   }
 
   const lines = [
-    `🌅 <b>Good Morning, Dr. Rania!</b>`,
+    `🌅 <b>Good Morning, Dr. Rania Khalil!</b>`,
     `📅 ${todayStr}`,
     ``,
     `📊 <b>Clinic Summary</b>`,
@@ -191,7 +191,7 @@ export const telegramRouter = router({
     const chatId = process.env.TELEGRAM_CHAT_ID;
     if (!botToken || !chatId) return { configured: false, message: "Telegram credentials not set." };
     const success = await sendTelegramMessage(
-      `✅ <b>Dr. Rania Clinic</b>\n\nTelegram connection verified!\n🤖 Bot: @DrRaniaClinicbot\n📱 Chat: Dr. Rania Mousa\n⏰ ${new Date().toLocaleString("en-AE", { timeZone: "Asia/Dubai" })}`
+      `✅ <b>Dr. Rania Khalil Clinic</b>\n\nTelegram connection verified!\n🤖 Bot: @DrRaniaClinicbot\n🌐 Domain: drmousa.clinic\n⏰ ${new Date().toLocaleString("en-AE", { timeZone: "Asia/Dubai" })}`
     );
     return { configured: true, connected: success };
   }),

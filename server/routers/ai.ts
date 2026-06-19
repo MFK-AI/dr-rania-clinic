@@ -27,7 +27,7 @@ function requireDoctor(role: string) {
 }
 
 // The Claude system prompt for clinical documentation extraction
-const EXTRACTION_SYSTEM_PROMPT = `You are the AI extraction and clinical documentation engine for Dr. Rania Mousa's private OB-GYN clinic workflow app.
+const EXTRACTION_SYSTEM_PROMPT = `You are the AI extraction and clinical documentation engine for Dr. Rania Khalil's private OB-GYN clinic at drmousa.clinic.
 
 Your role: Convert doctor-provided voice transcripts, screenshots, OCR text, uploaded files, and handwritten-note extractions into structured English doctor documentation.
 

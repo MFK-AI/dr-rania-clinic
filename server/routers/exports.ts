@@ -32,7 +32,7 @@ async function buildExcelBuffer(
 ): Promise<Buffer> {
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Dr. Rania Clinic System";
+  workbook.creator = "Dr. Rania Khalil Clinic — drmousa.clinic";
   workbook.created = new Date();
   workbook.modified = new Date();
 
@@ -40,7 +40,7 @@ async function buildExcelBuffer(
   const cover = workbook.addWorksheet("Cover");
   cover.mergeCells("A1:F1");
   const titleCell = cover.getCell("A1");
-  titleCell.value = "Dr. Rania — Patient Intelligence Export";
+  titleCell.value = "Dr. Rania Khalil Clinic — Patient Records Export";
   titleCell.font = { bold: true, size: 18, color: { argb: PLUM_ARGB }, name: "Calibri" };
   titleCell.alignment = { horizontal: "center", vertical: "middle" };
   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: MAUVE_ARGB } };
