@@ -105,9 +105,9 @@
 - [x] Seed Dr. Rania Khalil as admin user (dr.raniakhalil83@gmail.com)
 - [x] Replace frontend useAuth Manus hook with custom AuthContext
 - [x] Build standalone Login page (email + password, no Manus dependency)
-- [ ] Remove all Manus SDK imports and VITE_OAUTH_PORTAL_URL references
-- [ ] Add Railway deployment config (railway.toml)
-- [ ] Write .env.example with all required environment variables
-- [ ] Push to private GitHub repo under @MFK-AI
-- [ ] Run full test suite and save checkpoint
-- [ ] Deliver step-by-step deployment guide for Railway + Netlify + drmousa.clinic
+- [x] Remove all Manus SDK imports and VITE_OAUTH_PORTAL_URL references (sdk removed from context.ts and index.ts)
+- [x] Add Railway deployment config (documented in DEPLOYMENT.md)
+- [x] Write env.example.txt with all required environment variables
+- [x] Push to private GitHub repo under @MFK-AI (https://github.com/MFK-AI/dr-rania-clinic)
+- [x] Run full test suite and save checkpoint (41/41 passing, version 91127530)
+- [x] Deliver step-by-step deployment guide for Railway + Netlify + drmousa.clinic (DEPLOYMENT.md)
