@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
+import { storagePut } from "../storage";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -36,6 +37,32 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  // Direct file upload endpoint (multipart/form-data)
+  app.post("/api/storage/upload", async (req, res) => {
+    try {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      await new Promise<void>((resolve, reject) => {
+        req.on("end", resolve);
+        req.on("error", reject);
+      });
+      const body = Buffer.concat(chunks);
+      const contentType = req.headers["content-type"] ?? "application/octet-stream";
+      // Parse fileKey from query param
+      const fileKey = req.query["fileKey"] as string;
+      if (!fileKey) {
+        res.status(400).json({ error: "fileKey query param required" });
+        return;
+      }
+      const { key, url } = await storagePut(fileKey, body, contentType);
+      res.json({ key, url });
+    } catch (err) {
+      console.error("[Upload] Error:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

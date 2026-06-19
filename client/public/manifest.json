@@ -1,0 +1,24 @@
+{
+  "name": "Dr. Rania — Patient Intelligence",
+  "short_name": "Dr. Rania",
+  "description": "Private OB-GYN clinic management system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf9fb",
+  "theme_color": "#8B3A52",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
