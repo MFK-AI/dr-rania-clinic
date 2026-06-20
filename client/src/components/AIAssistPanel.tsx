@@ -117,6 +117,7 @@ export function AIAssistPanel({ mode, onApply, visitDate, visitLocation }: Props
   const extractPatientFromImage = trpc.ai.extractPatientFromImage.useMutation();
   const extractPatientFromText = trpc.ai.extractPatientFromText.useMutation();
   const extractVisitFromImage = trpc.ai.extractVisitFromImage.useMutation();
+  const getUploadUrl = trpc.files.getUploadUrl.useMutation();
 
   // ─── Waveform animation ───────────────────────────────────────────────────
 
@@ -251,9 +252,23 @@ export function AIAssistPanel({ mode, onApply, visitDate, visitLocation }: Props
     setPanelState("processing");
     setErrorMsg("");
     try {
+      // BUGFIX: this previously POSTed straight to /api/storage/upload with
+      // no fileKey query param. The server requires fileKey and returns a
+      // hard 400 without it, so every screenshot upload failed before the
+      // AI extraction ever ran. getUploadUrl validates the file and mints
+      // the key, matching the same pattern FilesUpload.tsx already used.
+      const { fileKey } = await getUploadUrl.mutateAsync({
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        fileSize: file.size,
+      });
+
       const formData = new FormData();
       formData.append("file", file);
-      const uploadRes = await fetch("/api/storage/upload", { method: "POST", body: formData });
+      const uploadRes = await fetch(
+        `/api/storage/upload?fileKey=${encodeURIComponent(fileKey)}`,
+        { method: "POST", body: formData }
+      );
       if (!uploadRes.ok) throw new Error("Image upload failed");
       const { url: imageUrl } = (await uploadRes.json()) as { url: string };
 
