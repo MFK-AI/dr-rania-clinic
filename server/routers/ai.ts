@@ -3,6 +3,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM, type Message } from "../_core/llm";
 import { transcribeAudio } from "../_core/voiceTranscription";
+import { storageGetSignedUrl } from "../storage";
 import {
   approveAiExtraction,
   createAiExtraction,
@@ -15,9 +16,25 @@ import {
 } from "../db";
 import type { AiExtractionResult } from "../../shared/types";
 
+// BUGFIX: the AI provider fetches image_url server-to-server, with no
+// browser session cookie attached. PR #1 correctly added an auth check to
+// the /manus-storage/* proxy route, which means that fetch now fails
+// silently -- the model just gets no image and returns an empty/null
+// result instead of a hard error. Internal storage URLs need to be
+// resolved to a direct, time-limited S3 signed URL instead, which the
+// provider can fetch without any cookie at all.
+async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
+  const marker = "/manus-storage/";
+  const idx = rawUrl.indexOf(marker);
+  if (idx === -1) return rawUrl; // not an internal storage URL, leave as-is
+  const key = rawUrl.slice(idx + marker.length);
+  return storageGetSignedUrl(key);
+}
+
 function requireDoctorOrAssistant(role: string) {
   if (role !== "doctor" && role !== "assistant" && role !== "admin") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+
   }
 }
 function requireDoctor(role: string) {
@@ -358,12 +375,13 @@ For maritalStatus use one of: single, married, divorced, widowed, or null.
 For pregnancyStatus use one of: not_pregnant, pregnant, postpartum, or null.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
+        const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);
         const messages: Message[] = [
           { role: "system", content: systemPrompt },
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: input.imageUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: resolvedImageUrl, detail: "high" } },
               { type: "text", text: "Extract all patient information from this image." },
             ],
           },
@@ -557,12 +575,13 @@ For visit_type use one of: new_patient, follow_up, emergency, procedure, prenata
 For extraction_status use: Clear, Needs Review, or Unclear.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
+        const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);
         const messages: Message[] = [
           { role: "system", content: systemPrompt },
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: input.imageUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: resolvedImageUrl, detail: "high" } },
               { type: "text", text: "Extract all clinical visit information from this image." },
             ],
           },
