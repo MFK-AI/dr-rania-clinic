@@ -270,7 +270,12 @@ export function AIAssistPanel({ mode, onApply, visitDate, visitLocation }: Props
         { method: "POST", body: formData }
       );
       if (!uploadRes.ok) throw new Error("Image upload failed");
-      const { url: imageUrl } = (await uploadRes.json()) as { url: string };
+      const { url: rawUrl } = (await uploadRes.json()) as { url: string };
+      // BUGFIX: storagePut returns a relative path ("/manus-storage/...").
+      // extractPatientFromImage / extractVisitFromImage require a fully
+      // qualified URL (z.string().url()), so a relative path fails Zod
+      // validation with "Invalid URL" before the AI ever runs.
+      const imageUrl = new URL(rawUrl, window.location.origin).toString();
 
       if (mode === "patient") {
         const result = await extractPatientFromImage.mutateAsync({ imageUrl });
