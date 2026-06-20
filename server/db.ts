@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, isNull, like, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { createPool } from "mysql2";
 import {
   AiExtraction,
   Attachment,
@@ -36,9 +37,18 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const pool = createPool({
+        uri: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false },
+        waitForConnections: true,
+        connectionLimit: 10,
+        connectTimeout: 30000,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      _db = drizzle(pool.promise()) as any;
+      console.log("[Database] Pool created successfully");
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      console.error("[Database] Failed to create pool:", error);
       _db = null;
     }
   }
