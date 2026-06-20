@@ -10,7 +10,17 @@ import { getSessionCookieOptions } from "../_core/cookies";
 import { SignJWT, jwtVerify } from "jose";
 import { ENV } from "../_core/env";
 
-const JWT_SECRET = new TextEncoder().encode(ENV.cookieSecret || "dr-rania-clinic-secret-2026");
+if (!ENV.cookieSecret) {
+  // SECURITY FIX: this used to fall back to a hardcoded default string
+  // ("dr-rania-clinic-secret-2026") whenever JWT_SECRET wasn't set. That
+  // default was readable in source -- anyone who saw it could forge a
+  // valid session token for any user ID. Fail loudly instead of silently
+  // signing tokens with a known, guessable secret.
+  throw new Error(
+    "JWT_SECRET environment variable is not set. Refusing to start with a fallback secret."
+  );
+}
+const JWT_SECRET = new TextEncoder().encode(ENV.cookieSecret);
 
 export async function signToken(userId: number): Promise<string> {
   return new SignJWT({ sub: String(userId) })
