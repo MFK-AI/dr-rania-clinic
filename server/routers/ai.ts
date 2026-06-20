@@ -402,6 +402,13 @@ Do not include markdown, code fences, or any text outside the JSON object.`;
           },
         ];
         const response = await invokeLLM({ messages });
+        if (!response?.choices?.[0]) {
+          console.error(
+            "[ai.extractPatientFromImage] unexpected LLM response shape:",
+            JSON.stringify(response).slice(0, 800)
+          );
+          throw new Error("LLM response did not include a choices array");
+        }
         const raw = response.choices[0]?.message?.content;
         const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
         // DIAGNOSTIC: length + truncated preview only -- avoids writing full
@@ -612,6 +619,13 @@ Do not include markdown, code fences, or any text outside the JSON object.`;
           },
         ];
         const response = await invokeLLM({ messages });
+        if (!response?.choices?.[0]) {
+          console.error(
+            "[ai.extractVisitFromImage] unexpected LLM response shape:",
+            JSON.stringify(response).slice(0, 800)
+          );
+          throw new Error("LLM response did not include a choices array");
+        }
         const raw = response.choices[0]?.message?.content;
         const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
         console.log(
