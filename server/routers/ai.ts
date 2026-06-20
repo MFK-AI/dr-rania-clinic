@@ -376,6 +376,7 @@ For pregnancyStatus use one of: not_pregnant, pregnant, postpartum, or null.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
         const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);
+        console.log("[ai.extractPatientFromImage] resolved image URL:", resolvedImageUrl);
         const messages: Message[] = [
           { role: "system", content: systemPrompt },
           {
@@ -389,10 +390,19 @@ Do not include markdown, code fences, or any text outside the JSON object.`;
         const response = await invokeLLM({ messages });
         const raw = response.choices[0]?.message?.content;
         const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
+        // DIAGNOSTIC: length + truncated preview only -- avoids writing full
+        // extracted patient data into infrastructure logs.
+        console.log(
+          "[ai.extractPatientFromImage] raw response length:",
+          content.length,
+          "preview:",
+          content.slice(0, 80)
+        );
         const cleaned = content.replace(/```json\n?|```/g, "").trim();
         const extractedData = JSON.parse(cleaned) as Record<string, unknown>;
         return { extractedData };
-      } catch {
+      } catch (err) {
+        console.error("[ai.extractPatientFromImage] failed:", err);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Could not extract patient data from image. Please try a clearer image or enter data manually.",
@@ -576,6 +586,7 @@ For extraction_status use: Clear, Needs Review, or Unclear.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
         const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);
+        console.log("[ai.extractVisitFromImage] resolved image URL:", resolvedImageUrl);
         const messages: Message[] = [
           { role: "system", content: systemPrompt },
           {
@@ -589,10 +600,17 @@ Do not include markdown, code fences, or any text outside the JSON object.`;
         const response = await invokeLLM({ messages });
         const raw = response.choices[0]?.message?.content;
         const content = typeof raw === "string" ? raw : JSON.stringify(raw ?? "{}");
+        console.log(
+          "[ai.extractVisitFromImage] raw response length:",
+          content.length,
+          "preview:",
+          content.slice(0, 80)
+        );
         const cleaned = content.replace(/```json\n?|```/g, "").trim();
         const extractedData = JSON.parse(cleaned) as Record<string, unknown>;
         return { extractedData };
-      } catch {
+      } catch (err) {
+        console.error("[ai.extractVisitFromImage] failed:", err);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Could not extract visit data from image. Please try a clearer image or enter data manually.",
