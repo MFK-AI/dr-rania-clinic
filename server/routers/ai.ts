@@ -28,7 +28,21 @@ async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
   const idx = rawUrl.indexOf(marker);
   if (idx === -1) return rawUrl; // not an internal storage URL, leave as-is
   const key = rawUrl.slice(idx + marker.length);
-  return storageGetSignedUrl(key);
+  const signedUrl = await storageGetSignedUrl(key);
+
+  // CONFIRMED VIA LOGS: the AI relay receives a valid, fetchable signed URL
+  // and returns a complete, validly-formatted JSON response -- but every
+  // field is null. That means it isn't actually fetching the image at all,
+  // not that the fetch is failing. Embedding the image directly as a
+  // base64 data URI removes the need for the relay to fetch anything.
+  const resp = await fetch(signedUrl);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch image bytes from storage (${resp.status})`);
+  }
+  const contentType = resp.headers.get("content-type") || "image/jpeg";
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  const base64 = buffer.toString("base64");
+  return `data:${contentType};base64,${base64}`;
 }
 
 function requireDoctorOrAssistant(role: string) {
@@ -376,7 +390,7 @@ For pregnancyStatus use one of: not_pregnant, pregnant, postpartum, or null.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
         const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);
-        console.log("[ai.extractPatientFromImage] resolved image URL:", resolvedImageUrl);
+        console.log("[ai.extractPatientFromImage] resolved image: data URI, length:", resolvedImageUrl.length);
         const messages: Message[] = [
           { role: "system", content: systemPrompt },
           {
@@ -586,7 +600,7 @@ For extraction_status use: Clear, Needs Review, or Unclear.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
         const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);
-        console.log("[ai.extractVisitFromImage] resolved image URL:", resolvedImageUrl);
+        console.log("[ai.extractVisitFromImage] resolved image: data URI, length:", resolvedImageUrl.length);
         const messages: Message[] = [
           { role: "system", content: systemPrompt },
           {
