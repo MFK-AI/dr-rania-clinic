@@ -1,0 +1,10 @@
+# Cloudflare Pages configuration
+# Build command: pnpm run build:client
+# Output directory: dist/public
+# Node.js version: 22
+
+[build]
+command = "pnpm run build:client"
+
+[build.upload]
+format = "service-worker"

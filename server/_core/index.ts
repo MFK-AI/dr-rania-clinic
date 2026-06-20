@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -38,6 +39,34 @@ async function startServer() {
 
   const app = express();
   const server = createServer(app);
+
+  // ─── CORS — allow Cloudflare Pages domains and custom domain ─────────────
+  const allowedOrigins: (string | RegExp)[] = [
+    "https://dr-rania-clinic.pages.dev",
+    "https://drmousa.clinic",
+    "https://www.drmousa.clinic",
+    // Allow any *.pages.dev preview deployments
+    /\.pages\.dev$/,
+  ];
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (same-origin, mobile apps, curl)
+        if (!origin) return callback(null, true);
+        const allowed = allowedOrigins.some((o) =>
+          typeof o === "string" ? o === origin : o.test(origin)
+        );
+        if (allowed) return callback(null, true);
+        // In development allow all origins
+        if (process.env.NODE_ENV === "development") return callback(null, true);
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      },
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+    })
+  );
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
