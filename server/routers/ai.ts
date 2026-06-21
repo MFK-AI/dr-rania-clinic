@@ -23,6 +23,23 @@ import type { AiExtractionResult } from "../../shared/types";
 // result instead of a hard error. Internal storage URLs need to be
 // resolved to a direct, time-limited S3 signed URL instead, which the
 // provider can fetch without any cookie at all.
+const EXTENSION_TO_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  heic: "image/heic",
+  heif: "image/heic",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+function mimeTypeFromKey(key: string): string {
+  const lastDot = key.lastIndexOf(".");
+  if (lastDot === -1) return "image/jpeg";
+  const ext = key.slice(lastDot + 1).toLowerCase();
+  return EXTENSION_TO_MIME[ext] ?? "image/jpeg";
+}
+
 async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
   const marker = "/manus-storage/";
   const idx = rawUrl.indexOf(marker);
@@ -30,16 +47,15 @@ async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
   const key = rawUrl.slice(idx + marker.length);
   const signedUrl = await storageGetSignedUrl(key);
 
-  // CONFIRMED VIA LOGS: the AI relay receives a valid, fetchable signed URL
-  // and returns a complete, validly-formatted JSON response -- but every
-  // field is null. That means it isn't actually fetching the image at all,
-  // not that the fetch is failing. Embedding the image directly as a
-  // base64 data URI removes the need for the relay to fetch anything.
+  // CONFIRMED VIA LOGS: the response Content-Type header from Forge's
+  // storage layer comes back as "multipart/form-data" regardless of what
+  // was actually uploaded -- not trustworthy. Determine the real image
+  // type from the file extension instead, which we control directly.
   const resp = await fetch(signedUrl);
   if (!resp.ok) {
     throw new Error(`Failed to fetch image bytes from storage (${resp.status})`);
   }
-  const contentType = resp.headers.get("content-type") || "image/jpeg";
+  const contentType = mimeTypeFromKey(key);
   const buffer = Buffer.from(await resp.arrayBuffer());
   const base64 = buffer.toString("base64");
   return `data:${contentType};base64,${base64}`;
