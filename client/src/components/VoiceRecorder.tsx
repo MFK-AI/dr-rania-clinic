@@ -263,11 +263,21 @@ export default function VoiceRecorder({
     const fileKey = `voice-notes/${Date.now()}_recording.${ext}`;
 
     try {
-      // Upload via XHR so we can track progress
+      // Upload via XHR so we can track progress.
+      // BUGFIX: this previously sent the raw blob as the request body with
+      // a manually-set Content-Type header (audio/webm etc). The server's
+      // upload endpoint uses busboy, which only parses multipart/form-data
+      // -- a raw binary body with a non-multipart content-type means
+      // busboy never finds a "file" part at all, failing with "No file
+      // found in upload" before transcription is ever reached. Sending a
+      // real FormData body (and NOT manually setting Content-Type, so the
+      // browser can attach the correct multipart boundary) matches the
+      // same pattern the working image upload already uses.
       const uploadedUrl = await new Promise<string>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", `/api/storage/upload?fileKey=${encodeURIComponent(fileKey)}`);
-        xhr.setRequestHeader("Content-Type", mimeType);
+        const formData = new FormData();
+        formData.append("file", blob, `recording.${ext}`);
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             setUploadProgress(Math.round((e.loaded / e.total) * 100));
@@ -282,7 +292,7 @@ export default function VoiceRecorder({
           }
         };
         xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.send(blob);
+        xhr.send(formData);
       });
 
       setState("processing");

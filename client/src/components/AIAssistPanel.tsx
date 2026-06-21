@@ -213,9 +213,21 @@ export function AIAssistPanel({ mode, onApply, visitDate, visitLocation }: Props
       // Upload audio blob to storage
       const resp = await fetch(audioUrl);
       const blob = await resp.blob();
+      // BUGFIX: same root cause as the screenshot upload bug -- this was
+      // POSTing to /api/storage/upload with no fileKey query param, which
+      // the server hard-requires (400 without it). Mint a real key first,
+      // matching the same pattern already used for images.
+      const { fileKey } = await getUploadUrl.mutateAsync({
+        fileName: "voice-note.webm",
+        mimeType: blob.type || "audio/webm",
+        fileSize: blob.size,
+      });
       const formData = new FormData();
       formData.append("file", blob, "voice-note.webm");
-      const uploadRes = await fetch("/api/storage/upload", { method: "POST", body: formData });
+      const uploadRes = await fetch(
+        `/api/storage/upload?fileKey=${encodeURIComponent(fileKey)}`,
+        { method: "POST", body: formData }
+      );
       if (!uploadRes.ok) throw new Error("Upload failed");
       const { url: uploadedUrl } = (await uploadRes.json()) as { url: string };
 
