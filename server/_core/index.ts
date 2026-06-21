@@ -85,7 +85,17 @@ async function startServer() {
     // extracts just the actual file bytes and its real per-file mime type.
     try {
       const fileKey = req.query["fileKey"] as string;
+      // DIAGNOSTIC: log every request's key params up front -- two
+      // different 400 paths exist below (missing fileKey, no file found
+      // by busboy) and neither had distinguishing logs before, making it
+      // impossible to tell which one was firing from Deploy Logs alone.
+      console.log(
+        "[Upload] incoming request -- fileKey:", fileKey || "(none)",
+        "content-type:", req.headers["content-type"],
+        "content-length:", req.headers["content-length"]
+      );
       if (!fileKey) {
+        console.log("[Upload] REJECTED: missing fileKey query param");
         res.status(400).json({ error: "fileKey query param required" });
         return;
       }
@@ -113,6 +123,7 @@ async function startServer() {
       bb.on("finish", async () => {
         try {
           if (!fileSeen || !fileBuffer) {
+            console.log("[Upload] REJECTED: busboy finished but found no file part (fileSeen:", fileSeen, ")");
             res.status(400).json({ error: "No file found in upload" });
             return;
           }
