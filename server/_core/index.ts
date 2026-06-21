@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import Busboy from "busboy";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -89,7 +90,7 @@ async function startServer() {
         return;
       }
 
-      const bb = busboy({ headers: req.headers });
+      const bb = Busboy({ headers: req.headers });
       let fileBuffer: Buffer | null = null;
       let fileMimeType = "application/octet-stream";
       let fileSeen = false;
