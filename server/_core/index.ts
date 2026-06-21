@@ -74,24 +74,65 @@ async function startServer() {
   registerOAuthRoutes(app);
 
   // Direct file upload endpoint (multipart/form-data)
-  app.post("/api/storage/upload", async (req, res) => {
+  app.post("/api/storage/upload", (req, res) => {
+    // BUGFIX: this previously buffered the ENTIRE raw request body --
+    // multipart boundaries, per-part headers, and all -- and stored that
+    // whole envelope as if it were the file itself, with the request's
+    // own "multipart/form-data" content-type label attached to it. The
+    // AI provider (Gemini, via Forge) correctly rejected that as an
+    // invalid image. busboy properly parses the multipart stream and
+    // extracts just the actual file bytes and its real per-file mime type.
     try {
-      const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      await new Promise<void>((resolve, reject) => {
-        req.on("end", resolve);
-        req.on("error", reject);
-      });
-      const body = Buffer.concat(chunks);
-      const contentType = req.headers["content-type"] ?? "application/octet-stream";
-      // Parse fileKey from query param
       const fileKey = req.query["fileKey"] as string;
       if (!fileKey) {
         res.status(400).json({ error: "fileKey query param required" });
         return;
       }
-      const { key, url } = await storagePut(fileKey, body, contentType);
-      res.json({ key, url });
+
+      const bb = busboy({ headers: req.headers });
+      let fileBuffer: Buffer | null = null;
+      let fileMimeType = "application/octet-stream";
+      let fileSeen = false;
+
+      bb.on("file", (_name, stream, info) => {
+        fileSeen = true;
+        fileMimeType = info.mimeType || fileMimeType;
+        const chunks: Buffer[] = [];
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", () => {
+          fileBuffer = Buffer.concat(chunks);
+        });
+      });
+
+      bb.on("error", (err) => {
+        console.error("[Upload] busboy parse error:", err);
+        if (!res.headersSent) res.status(400).json({ error: "Invalid upload" });
+      });
+
+      bb.on("finish", async () => {
+        try {
+          if (!fileSeen || !fileBuffer) {
+            res.status(400).json({ error: "No file found in upload" });
+            return;
+          }
+          // DIAGNOSTIC: verify busboy actually isolated the file bytes,
+          // not the raw multipart envelope (magic bytes for a real JPEG
+          // start with ffd8ff; a captured multipart envelope would start
+          // with "--" i.e. 2d2d).
+          console.log(
+            "[Upload] fileBuffer length:", fileBuffer.length,
+            "magic bytes:", fileBuffer.subarray(0, 12).toString("hex"),
+            "fileMimeType from busboy:", fileMimeType
+          );
+          const { key, url } = await storagePut(fileKey, fileBuffer, fileMimeType);
+          res.json({ key, url });
+        } catch (err) {
+          console.error("[Upload] storagePut error:", err);
+          res.status(500).json({ error: "Upload failed" });
+        }
+      });
+
+      req.pipe(bb);
     } catch (err) {
       console.error("[Upload] Error:", err);
       res.status(500).json({ error: "Upload failed" });
