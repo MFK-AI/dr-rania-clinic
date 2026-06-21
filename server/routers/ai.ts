@@ -56,8 +56,20 @@ async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
     throw new Error(`Failed to fetch image bytes from storage (${resp.status})`);
   }
   const contentType = mimeTypeFromKey(key);
+  const declaredLength = resp.headers.get("content-length");
   const buffer = Buffer.from(await resp.arrayBuffer());
   const base64 = buffer.toString("base64");
+
+  // DIAGNOSTIC: confirm the bytes we fetched are actually intact and look
+  // like a real image, before blaming Forge's relay/Gemini translation.
+  const magicBytesHex = buffer.subarray(0, 12).toString("hex");
+  console.log(
+    "[resolveImageUrlForLLM] declared content-length:", declaredLength,
+    "actual buffer bytes:", buffer.length,
+    "magic bytes:", magicBytesHex,
+    "mime type used:", contentType
+  );
+
   return `data:${contentType};base64,${base64}`;
 }
 
