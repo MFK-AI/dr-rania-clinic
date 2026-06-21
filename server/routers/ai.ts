@@ -40,6 +40,43 @@ function mimeTypeFromKey(key: string): string {
   return EXTENSION_TO_MIME[ext] ?? "image/jpeg";
 }
 
+const AUDIO_EXTENSION_TO_MIME: Record<string, string> = {
+  webm: "audio/webm",
+  m4a: "audio/m4a",
+  mp4: "audio/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  aac: "audio/aac",
+};
+
+function audioMimeTypeFromKey(key: string): string {
+  const lastDot = key.lastIndexOf(".");
+  if (lastDot === -1) return "audio/webm";
+  const ext = key.slice(lastDot + 1).toLowerCase();
+  return AUDIO_EXTENSION_TO_MIME[ext] ?? "audio/webm";
+}
+
+// Same fix as resolveImageUrlForLLM, for the voice transcription path:
+// transcribeAudio() fetches audioUrl server-to-server with no session
+// cookie, so an internal /manus-storage/ path hits the same auth-gated
+// route and fails. Resolve to a direct signed URL instead, and return the
+// correct mime type from the file extension rather than trusting the
+// storage layer's unreliable Content-Type header on the way back.
+async function resolveAudioUrlForTranscription(
+  rawUrl: string
+): Promise<{ url: string; mimeType: string }> {
+  const marker = "/manus-storage/";
+  const idx = rawUrl.indexOf(marker);
+  if (idx === -1) {
+    // Not an internal storage URL -- leave it as-is, no mime override.
+    return { url: rawUrl, mimeType: "audio/webm" };
+  }
+  const key = rawUrl.slice(idx + marker.length);
+  const signedUrl = await storageGetSignedUrl(key);
+  return { url: signedUrl, mimeType: audioMimeTypeFromKey(key) };
+}
+
 async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
   const marker = "/manus-storage/";
   const idx = rawUrl.indexOf(marker);
@@ -187,15 +224,18 @@ export const aiRouter = router({
       // Step 1: Transcribe audio
       let transcript = "";
       try {
-      const transcriptionResult = await transcribeAudio({
-        audioUrl: input.audioUrl,
-        prompt: "OB-GYN clinical notes, mixed Arabic and English medical terminology",
-      });
-      if ('error' in transcriptionResult) {
-        throw new Error(transcriptionResult.error);
-      }
-      transcript = transcriptionResult.text;
+        const { url: resolvedAudioUrl, mimeType } = await resolveAudioUrlForTranscription(input.audioUrl);
+        const transcriptionResult = await transcribeAudio({
+          audioUrl: resolvedAudioUrl,
+          mimeType,
+          prompt: "OB-GYN clinical notes, mixed Arabic and English medical terminology",
+        });
+        if ('error' in transcriptionResult) {
+          throw new Error(transcriptionResult.error);
+        }
+        transcript = transcriptionResult.text;
       } catch (err) {
+        console.error("[ai.transcribeAndExtract] transcription failed:", err);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Audio transcription failed. Please try again or upload a clearer recording.",
