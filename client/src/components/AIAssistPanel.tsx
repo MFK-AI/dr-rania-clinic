@@ -229,7 +229,12 @@ export function AIAssistPanel({ mode, onApply, visitDate, visitLocation }: Props
         { method: "POST", body: formData }
       );
       if (!uploadRes.ok) throw new Error("Upload failed");
-      const { url: uploadedUrl } = (await uploadRes.json()) as { url: string };
+      const { url: rawUploadedUrl } = (await uploadRes.json()) as { url: string };
+      // BUGFIX: same issue already fixed for screenshots -- storagePut
+      // returns a relative path, but transcribeAndExtract's input schema
+      // requires an absolute URL (z.string().url()), so a relative path
+      // fails validation with "Invalid URL" before transcription runs.
+      const uploadedUrl = new URL(rawUploadedUrl, window.location.origin).toString();
 
       if (mode === "visit") {
         const result = await transcribeAndExtract.mutateAsync({

@@ -286,7 +286,9 @@ export default function VoiceRecorder({
         xhr.onload = () => {
           if (xhr.status === 200) {
             const data = JSON.parse(xhr.responseText) as { url: string };
-            resolve(data.url);
+            // BUGFIX: storagePut returns a relative path; transcribeAndExtract's
+            // input schema requires an absolute URL (z.string().url()).
+            resolve(new URL(data.url, window.location.origin).toString());
           } else {
             reject(new Error(`Upload failed: ${xhr.statusText}`));
           }
