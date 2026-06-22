@@ -351,7 +351,9 @@ export const aiRouter = router({
     .input(
       z.object({
         extractionId: z.number(),
-        visitId: z.number(),
+        // Optional — voice notes recorded standalone (not within a visit form)
+        // have no visitId. Approval still saves reminders + fires Calendar/Telegram.
+        visitId: z.number().optional(),
         // Doctor-reviewed final data (may differ from AI draft)
         finalData: z.object({
           reasonForVisit: z.string().optional(),
@@ -392,24 +394,26 @@ export const aiRouter = router({
     .mutation(async ({ ctx, input }) => {
       requireDoctor(ctx.user.role);
 
-      const visit = await getVisitById(input.visitId);
-      if (!visit) throw new TRPCError({ code: "NOT_FOUND", message: "Visit not found." });
-
-      // Apply final data to visit and mark as final
-      await updateVisit(
-        input.visitId,
-        { ...input.finalData, status: "final" },
-        ctx.user.id
-      );
+      // If a visitId is provided, update the visit with the final clinical data.
+      // Voice notes recorded standalone (outside a visit form) have no visitId --
+      // in that case we skip the visit update and still save reminders.
+      let visit = null;
+      if (input.visitId) {
+        visit = await getVisitById(input.visitId);
+        if (!visit) throw new TRPCError({ code: "NOT_FOUND", message: "Visit not found." });
+        await updateVisit(
+          input.visitId,
+          { ...input.finalData, status: "final" },
+          ctx.user.id
+        );
+      }
 
       // Mark extraction as approved
       await approveAiExtraction(input.extractionId, ctx.user.id);
 
       // Resolve the patient for reminder linking.
-      // When a voice note is recorded without selecting a patient first,
-      // patientId arrives as 0. Try to auto-match from the extraction's
-      // own extracted patient_phone / patient_name before giving up.
-      let resolvedPatientId = visit.patientId;
+      // Priority order: visit.patientId → extracted phone → extracted name → override
+      let resolvedPatientId: number | null = visit?.patientId ?? null;
       if (!resolvedPatientId) {
         const extraction = await getAiExtractionById(input.extractionId);
         const extracted = extraction?.extractedData as Record<string, unknown> | null;
@@ -441,7 +445,7 @@ export const aiRouter = router({
 
         await createReminder({
           patientId: finalPatientId,
-          visitId: input.visitId,
+          visitId: input.visitId ?? null,
           reminderType: r.reminderType,
           title: r.title,
           dueDate: r.dueDate,
