@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { logTelegramAlert, getOverdueReminders, getTodaysVisits, listPatients } from "../db";
+import { logTelegramAlert, getOverdueReminders, getTodaysReminders, getTodaysVisits, listPatients, getAllUsers, getPatientById } from "../db";
 
 const TELEGRAM_API = "https://api.telegram.org";
 
@@ -89,6 +89,17 @@ export function formatVisitAlert(visit: {
   return lines.join("\n");
 }
 
+const REMINDER_TYPE_EMOJI: Record<string, string> = {
+  call_patient: "📞",
+  inform_result: "📋",
+  check_lab: "🧪",
+  check_imaging: "🔬",
+  follow_up: "🔄",
+  medication_review: "💊",
+  procedure_booking: "📅",
+  custom: "📌",
+};
+
 export async function formatDailySummary(): Promise<string> {
   const dubaiNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dubai" }));
   const todayStr = dubaiNow.toLocaleDateString("en-AE", { timeZone: "Asia/Dubai", weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -96,18 +107,44 @@ export async function formatDailySummary(): Promise<string> {
   let todayVisitCount = 0;
   let overdueCount = 0;
   let totalPatients = 0;
+  let todayReminders: Awaited<ReturnType<typeof getTodaysReminders>> = [];
+  let overdueReminders: Awaited<ReturnType<typeof getOverdueReminders>> = [];
 
   try {
-    const [visits, overdue, patients] = await Promise.all([
+    const [visits, overdue, patients, todayRem] = await Promise.all([
       getTodaysVisits(),
       getOverdueReminders(),
       listPatients(1000, 0),
+      getTodaysReminders(),
     ]);
     todayVisitCount = visits.length;
     overdueCount = overdue.length;
     totalPatients = patients.length;
+    todayReminders = todayRem;
+    overdueReminders = overdue;
   } catch {
     // proceed with zeros if DB unavailable
+  }
+
+  // Enrich reminders with patient names (best-effort)
+  const enrichedToday: { title: string; patientName: string; dueTime: string | null; type: string }[] = [];
+  for (const r of todayReminders) {
+    let patientName = "Unknown Patient";
+    try {
+      const p = await getPatientById(r.patientId);
+      if (p) patientName = p.name;
+    } catch { /* ignore */ }
+    enrichedToday.push({ title: r.title, patientName, dueTime: r.dueTime ?? null, type: r.reminderType });
+  }
+
+  const enrichedOverdue: { title: string; patientName: string; dueDate: string; type: string }[] = [];
+  for (const r of overdueReminders.slice(0, 5)) { // cap at 5 overdue
+    let patientName = "Unknown Patient";
+    try {
+      const p = await getPatientById(r.patientId);
+      if (p) patientName = p.name;
+    } catch { /* ignore */ }
+    enrichedOverdue.push({ title: r.title, patientName, dueDate: r.dueDate, type: r.reminderType });
   }
 
   const lines = [
@@ -117,10 +154,37 @@ export async function formatDailySummary(): Promise<string> {
     `📊 <b>Clinic Summary</b>`,
     `👥 Total Patients: <b>${totalPatients}</b>`,
     `📋 Today's Visits: <b>${todayVisitCount}</b>`,
-    `⚠️ Overdue Reminders: <b>${overdueCount}</b>`,
+    `🔔 Today's Reminders: <b>${enrichedToday.length}</b>`,
+    overdueCount > 0 ? `⚠️ Overdue Reminders: <b>${overdueCount}</b>` : `✅ No overdue reminders`,
     ``,
-    `Have a wonderful and productive day! 🏥✨`,
   ];
+
+  if (enrichedToday.length > 0) {
+    lines.push(`📌 <b>Today's Reminder List</b>`);
+    for (const r of enrichedToday) {
+      const emoji = REMINDER_TYPE_EMOJI[r.type] ?? "📌";
+      const time = r.dueTime ? ` — <i>${r.dueTime}</i>` : "";
+      lines.push(`${emoji} <b>${r.patientName}</b>${time}`);
+      lines.push(`   └ ${r.title}`);
+    }
+    lines.push(``);
+  } else {
+    lines.push(`✅ <b>No reminders scheduled for today</b>`);
+    lines.push(``);
+  }
+
+  if (enrichedOverdue.length > 0) {
+    lines.push(`⚠️ <b>Overdue (action needed)</b>`);
+    for (const r of enrichedOverdue) {
+      const emoji = REMINDER_TYPE_EMOJI[r.type] ?? "📌";
+      lines.push(`${emoji} <b>${r.patientName}</b> — <i>was ${r.dueDate}</i>`);
+      lines.push(`   └ ${r.title}`);
+    }
+    if (overdueCount > 5) lines.push(`   … and ${overdueCount - 5} more`);
+    lines.push(``);
+  }
+
+  lines.push(`Have a wonderful and productive day! 🏥✨`);
 
   return lines.join("\n");
 }
