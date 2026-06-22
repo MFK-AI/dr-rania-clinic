@@ -1,24 +1,60 @@
 {
-  "name": "Dr. Rania Khalil — Clinic Management",
-  "short_name": "Dr. Rania Khalil",
-  "description": "Private OB-GYN clinic management system — drmousa.clinic",
+  "name": "Dr. Rania Mousa — Patient Intelligence",
+  "short_name": "Dr. Rania",
+  "description": "Private OB-GYN clinic management — drmousa.clinic",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#faf9fb",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#faf8fb",
   "theme_color": "#8B3A52",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["medical", "health", "productivity"],
+  "id": "drmousa-clinic-pwa",
   "icons": [
+    { "src": "/icons/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "name": "New Patient",
+      "short_name": "Patient",
+      "description": "Register a new patient",
+      "url": "/patients/new",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
     },
     {
-      "src": "/icon-512.png",
+      "name": "Reminders",
+      "short_name": "Reminders",
+      "description": "View today's reminders",
+      "url": "/reminders",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "AI Review",
+      "short_name": "AI",
+      "description": "Review AI extractions",
+      "url": "/ai-review",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "form_factor": "wide",
+      "label": "Dr. Rania Patient Intelligence Assistant"
     }
-  ]
+  ],
+  "prefer_related_applications": false
 }
