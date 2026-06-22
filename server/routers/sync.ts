@@ -313,9 +313,13 @@ export async function createReminderCalendarEvent(params: {
       start = { dateTime: startDt, timeZone: "Asia/Dubai" };
       end = { dateTime: startDate + "T" + endTime, timeZone: "Asia/Dubai" };
     } else {
-      // All-day event
+      // All-day event: Google Calendar requires end date = day AFTER start.
+      // An all-day event with start == end shows as 0-duration and is rejected.
+      const nextDay = new Date(startDate + "T00:00:00Z");
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const endDate = nextDay.toISOString().split("T")[0];
       start = { date: startDate };
-      end = { date: startDate };
+      end = { date: endDate };
     }
 
     const event = await calendar.events.insert({
@@ -335,11 +339,15 @@ export async function createReminderCalendarEvent(params: {
       },
     });
 
-    console.log("[Sync] Calendar reminder event created:", event.data.id);
-    return event.data.id ?? null;
+    const eventId = event.data.id ?? null;
+    console.log("[Sync] Calendar reminder event created successfully. ID:", eventId, "Date:", params.dueDate);
+    return eventId;
   } catch (err) {
-    console.error("[Sync] Failed to create calendar reminder event:", err);
-    return null;
+    // Log the full error detail -- Calendar API errors are often informative
+    const errMsg = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("[Sync] CALENDAR EVENT FAILED:", errMsg);
+    // Re-throw so the caller's .catch() can surface it in ai.approve logs too
+    throw err;
   }
 }
 

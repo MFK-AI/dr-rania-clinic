@@ -461,7 +461,12 @@ export const aiRouter = router({
           title: r.title,
           dueDate: r.dueDate,
           dueTime: r.dueTime,
-        }).catch((err) => console.error("[ai.approve] Calendar event failed:", err));
+        }).then((eventId) => {
+          console.log("[ai.approve] Calendar event created. ID:", eventId, "Reminder:", r.title, "Date:", r.dueDate);
+        }).catch((err) => {
+          const msg = err instanceof Error ? err.message : JSON.stringify(err);
+          console.error("[ai.approve] CALENDAR EVENT FAILED for reminder:", r.title, "Error:", msg);
+        });
 
         sendTelegramAlert(
           `🔔 *Reminder Approved*\n` +
