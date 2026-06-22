@@ -23,6 +23,8 @@ type ExtractedData = {
   advice?: string | null;
   follow_up_plan?: string | null;
   extraction_status?: string | null;
+  patient_name?: string | null;
+  patient_phone?: string | null;
   risk_flags?: string[];
   unclear_words_or_phrases?: string[];
   missing_documentation_items?: string[];
@@ -50,14 +52,17 @@ export default function AiReview() {
   const [activeId, setActiveId] = useState<number | null>(null);
   // Track which AI-suggested reminders the doctor has checked for each extraction
   const [approvedReminderIds, setApprovedReminderIds] = useState<Record<number, Set<number>>>({});
+  // Doctor can override the patient link for any extraction before approving
+  const [patientOverrides, setPatientOverrides] = useState<Record<number, number>>({});
 
   // ── Voice recorder state ─────────────────────────────────────────────────
   const [showRecorder, setShowRecorder] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
 
+  // Always load patients (needed for linking unlinked extractions)
   const { data: patientList } = trpc.patients.list.useQuery(
-    { limit: 200, offset: 0 },
-    { enabled: showRecorder }
+    { limit: 500, offset: 0 },
+    { enabled: true }
   );
 
   const patientOptions = useMemo(
@@ -226,13 +231,48 @@ export default function AiReview() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {extraction.visitId ? `Visit #${extraction.visitId} · ` : ""}
-                    {extraction.patientId ? `Patient #${extraction.patientId}` : "No patient linked"}
+                    {extraction.patientId
+                      ? `Patient #${extraction.patientId} — ${patientList?.find((p) => p.id === extraction.patientId)?.name ?? "linked"}`
+                      : patientOverrides[extraction.id]
+                      ? `Patient linked: ${patientList?.find((p) => p.id === patientOverrides[extraction.id])?.name ?? `#${patientOverrides[extraction.id]}`}`
+                      : "No patient linked"}
                   </p>
                 </CardHeader>
 
                 {activeId === extraction.id && (
                   <CardContent className="pt-0 space-y-4">
-                    {/* Transcript */}
+
+                    {/* Patient Link — required before approving */}
+                    {!extraction.patientId && (
+                      <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+                        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          ⚠️ No Patient Linked — select before approving
+                        </p>
+                        <p className="text-xs text-amber-700/80 mb-3">
+                          This extraction has no patient linked.
+                          {data?.patient_name && ` AI detected: "${data.patient_name}".`}
+                          {data?.patient_phone && ` Phone: ${data.patient_phone}.`}
+                          {" "}Select the correct patient to link reminders properly.
+                        </p>
+                        <Select
+                          value={patientOverrides[extraction.id] ? String(patientOverrides[extraction.id]) : ""}
+                          onValueChange={(v) => {
+                            if (v) setPatientOverrides((prev) => ({ ...prev, [extraction.id]: Number(v) }));
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-sm bg-white">
+                            <SelectValue placeholder="Select patient to link…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {patientList?.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.name}{p.phone ? ` · ${p.phone}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     {extraction.transcript && (
                       <div className="bg-muted/50 rounded-lg p-3">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
@@ -417,7 +457,7 @@ export default function AiReview() {
                               dueDate: r.dueDate,
                               dueTime: r.dueTime,
                               notes: r.notes,
-                              patientId: extraction.patientId ?? 0,
+                              patientId: extraction.patientId ?? patientOverrides[extraction.id] ?? 0,
                             }));
                           approveExtraction.mutate({
                             extractionId: extraction.id,

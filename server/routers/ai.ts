@@ -11,9 +11,11 @@ import {
   createAiExtraction,
   createReminder,
   getAiExtractionById,
+  getPatientByPhone,
   getPendingExtractions,
   getVisitById,
   logAuditEvent,
+  searchPatients,
   updateVisit,
 } from "../db";
 import type { AiExtractionResult } from "../../shared/types";
@@ -403,10 +405,42 @@ export const aiRouter = router({
       // Mark extraction as approved
       await approveAiExtraction(input.extractionId, ctx.user.id);
 
+      // Resolve the patient for reminder linking.
+      // When a voice note is recorded without selecting a patient first,
+      // patientId arrives as 0. Try to auto-match from the extraction's
+      // own extracted patient_phone / patient_name before giving up.
+      let resolvedPatientId = visit.patientId;
+      if (!resolvedPatientId) {
+        const extraction = await getAiExtractionById(input.extractionId);
+        const extracted = extraction?.extractedData as Record<string, unknown> | null;
+        const extractedPhone = extracted?.patient_phone as string | null;
+        const extractedName = extracted?.patient_name as string | null;
+
+        if (extractedPhone) {
+          const matched = await getPatientByPhone(extractedPhone.trim());
+          if (matched) resolvedPatientId = matched.id;
+        }
+        if (!resolvedPatientId && extractedName) {
+          const results = await searchPatients(extractedName.trim(), 1);
+          if (results[0]) resolvedPatientId = results[0].id;
+        }
+      }
+
       // Create approved reminders and fire Calendar + Telegram for each one
       for (const r of input.approvedReminders) {
+        // Use the reminder's own patientId if explicitly set (doctor confirmed
+        // it in the UI); otherwise fall back to the auto-resolved patient.
+        const finalPatientId = r.patientId > 0 ? r.patientId : (resolvedPatientId ?? 0);
+        if (!finalPatientId) {
+          console.warn(
+            "[ai.approve] Skipping reminder — could not resolve patient:",
+            r.title
+          );
+          continue;
+        }
+
         await createReminder({
-          patientId: r.patientId,
+          patientId: finalPatientId,
           visitId: input.visitId,
           reminderType: r.reminderType,
           title: r.title,
