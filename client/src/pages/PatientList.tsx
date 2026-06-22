@@ -30,7 +30,7 @@ export default function PatientList() {
             {patients?.length ?? 0} total patients
           </p>
         </div>
-        <Button onClick={() => setLocation("/patients/new")} className="gap-2 rounded-xl">
+        <Button onClick={() => setLocation("/patients/new")} className="gap-2 rounded-xl shadow-md hover:shadow-lg transition-shadow">
           <Plus className="h-4 w-4" />
           New Patient
         </Button>

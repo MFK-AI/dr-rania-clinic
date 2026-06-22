@@ -33,6 +33,7 @@ import {
   Settings,
   Shield,
   Upload,
+  UserCircle,
   Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -48,8 +49,9 @@ const menuItems = [
   { icon: FileSpreadsheet, label: "Export Data", path: "/export" },
 ];
 
+// Settings is accessible to ALL users; Audit is doctor/admin only
+const settingsItem = { icon: Settings, label: "Settings", path: "/admin" };
 const adminMenuItems = [
-  { icon: Settings, label: "Admin Settings", path: "/admin" },
   { icon: Shield, label: "Audit Log", path: "/audit" },
 ];
 
@@ -99,7 +101,7 @@ function DashboardLayoutContent({
   const isDoctor = user?.role === "doctor" || user?.role === "admin";
 
   const activeItem =
-    [...menuItems, ...adminMenuItems].find((i) => i.path === location) ??
+    [...menuItems, settingsItem, ...adminMenuItems].find((i) => i.path === location) ??
     menuItems[0];
 
   useEffect(() => {
@@ -200,29 +202,41 @@ function DashboardLayoutContent({
                 );
               })}
 
-              {isDoctor && (
-                <>
-                  <div className="my-2 mx-1 h-px bg-sidebar-border" />
-                  {adminMenuItems.map((item) => {
-                    const isActive = location.startsWith(item.path);
-                    return (
-                      <SidebarMenuItem key={item.path}>
-                        <SidebarMenuButton
-                          isActive={isActive}
-                          onClick={() => setLocation(item.path)}
-                          tooltip={item.label}
-                          className="h-10 rounded-lg font-normal text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
-                        >
-                          <item.icon
-                            className={`h-4 w-4 shrink-0 ${isActive ? "text-sidebar-primary" : ""}`}
-                          />
-                          <span className="text-sm">{item.label}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </>
-              )}
+              {/* Settings — visible to ALL users */}
+              <div className="my-2 mx-1 h-px bg-sidebar-border" />
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location.startsWith(settingsItem.path)}
+                  onClick={() => setLocation(settingsItem.path)}
+                  tooltip={settingsItem.label}
+                  className="h-10 rounded-lg font-normal text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
+                >
+                  <settingsItem.icon
+                    className={`h-4 w-4 shrink-0 ${location.startsWith(settingsItem.path) ? "text-sidebar-primary" : ""}`}
+                  />
+                  <span className="text-sm">{settingsItem.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {/* Audit Log — doctor/admin only */}
+              {isDoctor && adminMenuItems.map((item) => {
+                const isActive = location.startsWith(item.path);
+                return (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      onClick={() => setLocation(item.path)}
+                      tooltip={item.label}
+                      className="h-10 rounded-lg font-normal text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
+                    >
+                      <item.icon
+                        className={`h-4 w-4 shrink-0 ${isActive ? "text-sidebar-primary" : ""}`}
+                      />
+                      <span className="text-sm">{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarContent>
 
@@ -248,17 +262,22 @@ function DashboardLayoutContent({
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <div className="px-2 py-1.5">
-                  <p className="text-xs font-medium">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+              <DropdownMenuContent align="end" className="w-52">
+                <div className="px-2 py-2">
+                  <p className="text-xs font-semibold">{user?.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{user?.role} · drmousa.clinic</p>
                 </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setLocation("/admin")} className="cursor-pointer gap-2">
+                  <UserCircle className="h-4 w-4" />
+                  Profile &amp; Settings
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={logout}
-                  className="cursor-pointer text-destructive focus:text-destructive"
+                  className="cursor-pointer text-destructive focus:text-destructive gap-2"
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
+                  <LogOut className="h-4 w-4" />
                   Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>

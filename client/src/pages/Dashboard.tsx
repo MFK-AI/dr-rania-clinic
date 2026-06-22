@@ -322,7 +322,7 @@ export default function Dashboard() {
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "New Patient", icon: Users, path: "/patients/new", color: "bg-primary/10 text-primary" },
+              { label: "New Patient", icon: Users, path: "/patients/new", color: "bg-primary text-white" },
               { label: "New Visit", icon: Calendar, path: "/visits/new", color: "bg-info/10 text-info" },
               { label: "Upload Files", icon: Activity, path: "/files", color: "bg-accent text-accent-foreground" },
               { label: "AI Review", icon: BrainCircuit, path: "/ai-review", color: "bg-warning/10 text-warning" },
