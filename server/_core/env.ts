@@ -7,15 +7,17 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-  // Google Sheets & Calendar (replaces gws CLI that isn't available on Railway)
+  // Google Sheets & Calendar
+  // Stored as a single base64-encoded JSON blob to avoid all special-character
+  // and line-ending issues with the PEM private key in environment variables.
+  // Set GOOGLE_SERVICE_ACCOUNT_B64 in Railway (base64 of the full service account JSON).
+  googleServiceAccountB64: process.env.GOOGLE_SERVICE_ACCOUNT_B64 ?? "",
+  // Legacy separate fields (kept for backwards compatibility)
   googleClientEmail: process.env.GOOGLE_CLIENT_EMAIL ?? "",
   googlePrivateKey: (() => {
     let key = process.env.GOOGLE_PRIVATE_KEY ?? "";
-    // Strip surrounding quotes accidentally included when copying from JSON
     key = key.replace(/^["']+|["']+$/g, "");
-    // Convert literal \n (backslash+n) to actual newlines (standard JSON format)
     key = key.replace(/\\n/g, "\n");
-    // Normalize Windows line endings
     key = key.replace(/\r\n/g, "\n");
     return key.trim();
   })(),
