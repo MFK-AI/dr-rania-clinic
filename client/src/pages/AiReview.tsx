@@ -425,11 +425,10 @@ export default function AiReview() {
                         className="gap-1.5"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!extraction.visitId) {
-                            toast.error("No visit associated with this extraction. Link it to a visit first.");
-                            return;
-                          }
                           // Build approved reminders from checked items
+                          // Note: visitId may be null for standalone voice notes --
+                          // the server handles this gracefully (skips visit update,
+                          // still creates reminders + Calendar + Telegram)
                           // Normalize both raw and processed reminder shapes (same as rendering above)
                           type NormR = { title: string; reminderType: string; dueDate: string; dueTime?: string; notes?: string };
                           const allReminders: NormR[] = Array.isArray(data?.reminders)
@@ -461,7 +460,7 @@ export default function AiReview() {
                             }));
                           approveExtraction.mutate({
                             extractionId: extraction.id,
-                            visitId: extraction.visitId,
+                            visitId: extraction.visitId ?? undefined,
                             finalData: {
                               reasonForVisit: data?.reason_for_visit ?? undefined,
                               diagnosis: data?.diagnosis ?? undefined,
