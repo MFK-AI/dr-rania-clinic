@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { AlertTriangle, Bell, Calendar, Check, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 type ReminderStatus = "pending" | "done" | "overdue" | "cancelled" | "postponed";
 type ReminderType =
@@ -49,8 +49,29 @@ export default function Reminders() {
     dueDate: "",
     reminderType: "follow_up" as ReminderType,
   });
+  const [patientSearch, setPatientSearch] = useState("");
 
   const { data: reminders, isLoading } = trpc.reminders.listAll.useQuery({ limit: 200 });
+  const { data: patientList } = trpc.patients.list.useQuery(
+    { limit: 500, offset: 0 },
+    { enabled: showNewDialog }
+  );
+
+  const filteredPatients = useMemo(() => {
+    if (!patientList) return [];
+    const q = patientSearch.toLowerCase().trim();
+    if (!q) return patientList.slice(0, 20);
+    return patientList
+      .filter((p) =>
+        p.name?.toLowerCase().includes(q) || p.phone?.includes(q)
+      )
+      .slice(0, 10);
+  }, [patientList, patientSearch]);
+
+  const selectedPatient = useMemo(
+    () => patientList?.find((p) => String(p.id) === newForm.patientId),
+    [patientList, newForm.patientId]
+  );
   const utils = trpc.useUtils();
 
   const createReminder = trpc.reminders.create.useMutation({
@@ -113,14 +134,55 @@ export default function Reminders() {
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-1.5">
-                <Label>Patient ID *</Label>
-                <Input
-                  type="number"
-                  value={newForm.patientId}
-                  onChange={(e) => setNewForm((f) => ({ ...f, patientId: e.target.value }))}
-                  placeholder="Patient ID number"
-                  className="rounded-lg"
-                />
+                <Label>Patient *</Label>
+                {selectedPatient ? (
+                  <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">{selectedPatient.name}</p>
+                      <p className="text-xs text-muted-foreground">{selectedPatient.phone}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setNewForm((f) => ({ ...f, patientId: "" })); setPatientSearch(""); }}
+                      className="text-muted-foreground hover:text-destructive transition-colors ml-2"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Input
+                      value={patientSearch}
+                      onChange={(e) => setPatientSearch(e.target.value)}
+                      placeholder="Search by name or phone number…"
+                      className="rounded-lg"
+                      autoComplete="off"
+                    />
+                    {patientSearch.length > 0 && filteredPatients.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-md max-h-48 overflow-y-auto">
+                        {filteredPatients.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors"
+                            onClick={() => {
+                              setNewForm((f) => ({ ...f, patientId: String(p.id) }));
+                              setPatientSearch("");
+                            }}
+                          >
+                            <p className="text-sm font-medium">{p.name}</p>
+                            <p className="text-xs text-muted-foreground">{p.phone}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {patientSearch.length > 0 && filteredPatients.length === 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-md px-3 py-2">
+                        <p className="text-sm text-muted-foreground">No patients found</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Title *</Label>
@@ -178,7 +240,7 @@ export default function Reminders() {
                 <Button
                   onClick={() => {
                     if (!newForm.title || !newForm.dueDate || !newForm.patientId) {
-                      toast.error("Patient ID, title, and due date are required");
+                      toast.error("Select a patient, add a title, and set a due date");
                       return;
                     }
                     createReminder.mutate({
