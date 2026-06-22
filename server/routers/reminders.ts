@@ -3,6 +3,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   createReminder,
+  getAllUsers,
   getReminderById,
   getRemindersByPatient,
   getTodaysReminders,
@@ -49,6 +50,8 @@ const reminderInput = z.object({
   isRepeating: z.boolean().default(false),
   requiresDoctorReview: z.boolean().default(false),
   sourceText: z.string().optional(),
+  // Optional: specific user IDs to notify via Telegram when this reminder is created
+  notifyUserIds: z.array(z.number()).optional(),
 });
 
 export const remindersRouter = router({
@@ -110,6 +113,28 @@ export const remindersRouter = router({
         sendTelegramAlert(
           `🔔 *New Reminder*\n👤 ${p.name} (${p.phone})\n📋 ${input.title}\n📅 Due: ${input.dueDate}\n🏷️ Type: ${input.reminderType}`
         ).catch(() => {});
+        // Send targeted notification to specific staff members if requested
+        if (input.notifyUserIds && input.notifyUserIds.length > 0) {
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          if (botToken) {
+            getAllUsers().then((allUsers) => {
+              for (const uid of input.notifyUserIds!) {
+                const staffUser = allUsers.find((u) => u.id === uid && u.isActive && u.telegramChatId);
+                if (staffUser?.telegramChatId) {
+                  fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      chat_id: staffUser.telegramChatId,
+                      text: `🔔 *Reminder Assigned to You*\n👤 ${p.name} (${p.phone})\n📋 ${input.title}\n📅 Due: ${input.dueDate}\n🏷️ ${input.reminderType.replace(/_/g, " ")}\n\nOpen the clinic app for full details.`,
+                      parse_mode: "Markdown",
+                    }),
+                  }).catch(() => {});
+                }
+              }
+            }).catch(() => {});
+          }
+        }
       }).catch(() => {});
       return { id };
     }),

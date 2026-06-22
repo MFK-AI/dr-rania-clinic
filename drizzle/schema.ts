@@ -20,6 +20,14 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["doctor", "assistant", "admin"]).default("assistant").notNull(),
   telegramChatId: varchar("telegramChatId", { length: 64 }),
   isActive: boolean("isActive").default(true).notNull(),
+  // Doctor / staff profile fields
+  title: varchar("title", { length: 32 }),            // Dr., Prof., etc.
+  specialty: varchar("specialty", { length: 128 }),
+  dateOfBirth: varchar("dateOfBirth", { length: 20 }),
+  address: text("address"),
+  country: varchar("country", { length: 64 }),
+  emirate: varchar("emirate", { length: 64 }),
+  mobileNumber: varchar("mobileNumber", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

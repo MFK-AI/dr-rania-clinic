@@ -137,6 +137,46 @@ export const customAuthRouter = router({
     }),
 
   // Admin-only: change a staff member's password
+  getProfile: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const result = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
+      const u = result[0];
+      if (!u) return null;
+      const { passwordHash: _, ...safe } = u;
+      return safe;
+    }),
+
+  updateProfile: protectedProcedure
+    .input(z.object({
+      name: z.string().optional(),
+      title: z.string().optional(),
+      specialty: z.string().optional(),
+      dateOfBirth: z.string().optional(),
+      address: z.string().optional(),
+      country: z.string().optional(),
+      emirate: z.string().optional(),
+      mobileNumber: z.string().optional(),
+      telegramChatId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const update: Record<string, string | null> = {};
+      if (input.name !== undefined) update.name = input.name;
+      if (input.title !== undefined) update.title = input.title || null;
+      if (input.specialty !== undefined) update.specialty = input.specialty || null;
+      if (input.dateOfBirth !== undefined) update.dateOfBirth = input.dateOfBirth || null;
+      if (input.address !== undefined) update.address = input.address || null;
+      if (input.country !== undefined) update.country = input.country || null;
+      if (input.emirate !== undefined) update.emirate = input.emirate || null;
+      if (input.mobileNumber !== undefined) update.mobileNumber = input.mobileNumber || null;
+      if (input.telegramChatId !== undefined) update.telegramChatId = input.telegramChatId || null;
+      await db.update(users).set(update).where(eq(users.id, ctx.user.id));
+      return { success: true };
+    }),
+
   changePassword: protectedProcedure
     .input(z.object({
       currentPassword: z.string().min(1),
