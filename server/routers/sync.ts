@@ -209,14 +209,14 @@ export const syncRouter = router({
     }
     try {
       const sheets = await getSheetsClient();
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID, range: "Patients!A1:P1",
-        valueInputOption: "USER_ENTERED", requestBody: { values: [PATIENT_HEADERS] },
+
+      // CLEAR all existing data first to eliminate any stale headers from previous
+      // schema versions (e.g. gws CLI used different column order with bloodType etc).
+      await sheets.spreadsheets.values.batchClear({
+        spreadsheetId: SHEET_ID,
+        requestBody: { ranges: ["Patients!A:Z", "Visits!A:Z"] },
       });
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID, range: "Visits!A1:M1",
-        valueInputOption: "USER_ENTERED", requestBody: { values: [VISIT_HEADERS] },
-      });
+
       const patients = await listPatients(10000);
       const patientRows: string[][] = [PATIENT_HEADERS];
       const visitRows: string[][] = [VISIT_HEADERS];

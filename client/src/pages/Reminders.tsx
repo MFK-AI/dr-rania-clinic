@@ -49,6 +49,11 @@ export default function Reminders() {
     description: "",
     dueDate: "",
     reminderType: "follow_up" as ReminderType,
+    notifyUserIds: [] as number[],
+  });
+
+  const { data: staffList } = trpc.admin.listUsers.useQuery(undefined, {
+    select: (users) => users.filter((u) => u.isActive && (u as { telegramChatId?: string }).telegramChatId),
   });
   const [patientSearch, setPatientSearch] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -82,7 +87,7 @@ export default function Reminders() {
       toast.success("Reminder created");
       utils.reminders.listAll.invalidate();
       setShowNewDialog(false);
-      setNewForm({ patientId: "", title: "", description: "", dueDate: "", reminderType: "follow_up" });
+      setNewForm({ patientId: "", title: "", description: "", dueDate: "", reminderType: "follow_up", notifyUserIds: [] });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -234,6 +239,36 @@ export default function Reminders() {
                   className="rounded-lg"
                 />
               </div>
+              {/* Notify specific nurses */}
+              {staffList && staffList.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5 text-sm">
+                    Notify Staff via Telegram (optional)
+                  </Label>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto border rounded-lg p-2 bg-muted/20">
+                    {staffList.map((s) => (
+                      <label key={s.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 rounded px-1 py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={newForm.notifyUserIds.includes(s.id)}
+                          onChange={(e) => {
+                            setNewForm((f) => ({
+                              ...f,
+                              notifyUserIds: e.target.checked
+                                ? [...f.notifyUserIds, s.id]
+                                : f.notifyUserIds.filter((id) => id !== s.id),
+                            }));
+                          }}
+                          className="rounded border-border"
+                        />
+                        <span className="text-sm">{s.name}</span>
+                        <span className="text-xs text-muted-foreground">({s.role})</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Selected staff receive a direct Telegram message when this reminder is created.</p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>Notes</Label>
                 <Textarea
@@ -260,6 +295,7 @@ export default function Reminders() {
                       notes: newForm.description || undefined,
                       dueDate: newForm.dueDate,
                       reminderType: newForm.reminderType,
+                      notifyUserIds: newForm.notifyUserIds.length > 0 ? newForm.notifyUserIds : undefined,
                     });
                   }}
                   disabled={createReminder.isPending}

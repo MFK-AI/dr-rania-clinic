@@ -9,6 +9,7 @@ import {
   logAuditEvent,
   updateUserRole,
   updateUserTelegram,
+  updateUserTelegramById,
 } from "../db";
 
 function requireDoctor(role: string) {
@@ -57,6 +58,14 @@ export const adminRouter = router({
     .mutation(async ({ ctx, input }) => {
       requireDoctor(ctx.user.role);
       await updateUserTelegram(ctx.user.id, input.telegramChatId);
+      return { success: true };
+    }),
+
+  updateUserTelegramById: protectedProcedure
+    .input(z.object({ userId: z.number(), telegramChatId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      requireDoctor(ctx.user.role);
+      await updateUserTelegramById(input.userId, input.telegramChatId || null);
       return { success: true };
     }),
 

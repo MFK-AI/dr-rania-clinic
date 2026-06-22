@@ -610,3 +610,9 @@ export async function updateAiExtractionPatient(id: number, patientId: number): 
   if (!db) return;
   await db.update(aiExtractions).set({ patientId }).where(eq(aiExtractions.id, id));
 }
+
+export async function updateUserTelegramById(userId: number, telegramChatId: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ telegramChatId }).where(eq(users.id, userId));
+}
