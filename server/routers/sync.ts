@@ -351,13 +351,23 @@ export async function createReminderCalendarEvent(params: {
     });
 
     const eventId = event.data.id ?? null;
-    console.log("[Sync] Calendar reminder event created successfully. ID:", eventId, "Date:", params.dueDate);
+    console.log("[Sync] ✅ Calendar reminder event created. ID:", eventId, "Date:", params.dueDate);
     return eventId;
   } catch (err) {
-    // Log the full error detail -- Calendar API errors are often informative
     const errMsg = err instanceof Error ? err.message : JSON.stringify(err);
-    console.error("[Sync] CALENDAR EVENT FAILED:", errMsg);
-    // Re-throw so the caller's .catch() can surface it in ai.approve logs too
+    // Provide clear diagnostic for the most common failure modes
+    if (errMsg.includes("Not Found") || errMsg.includes("notFound")) {
+      console.error(
+        "[Sync] CALENDAR FAILED: 'Not Found' — Calendar API is not enabled in Google Cloud Console, OR " +
+        "the service account does not have 'Make changes to events' permission on the target calendar. " +
+        "Fix: go to console.cloud.google.com → APIs & Services → Enable APIs → enable 'Google Calendar API'. " +
+        "Then share calendar at calendar.google.com with " + CALENDAR_ID + " → give 'Make changes to events'."
+      );
+    } else if (errMsg.includes("forbidden") || errMsg.includes("403")) {
+      console.error("[Sync] CALENDAR FAILED: 403 Forbidden — service account lacks calendar write permission.");
+    } else {
+      console.error("[Sync] CALENDAR EVENT FAILED:", errMsg);
+    }
     throw err;
   }
 }

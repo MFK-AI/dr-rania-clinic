@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Save, Mic, MicOff, Loader2 } from "lucide-react";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
-import { AIAssistPanel, type PatientExtractedData } from "@/components/AIAssistPanel";
+import { AIAssistPanel, type PatientExtractedData, type ExtractedReminder } from "@/components/AIAssistPanel";
 
 // ─── Per-field inline mic button ─────────────────────────────────────────────
 
@@ -156,10 +156,43 @@ export default function PatientForm() {
 
   const utils = trpc.useUtils();
 
+  // Reminders extracted from AI input (screenshot/voice) — auto-created after patient is saved
+  const [pendingReminders, setPendingReminders] = useState<ExtractedReminder[]>([]);
+
+  const createReminder = trpc.reminders.create.useMutation();
+
   const createPatient = trpc.patients.create.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       toast.success("Patient created successfully");
       utils.patients.list.invalidate();
+      // Auto-create any AI-extracted reminders linked to this patient
+      const validTypes = [
+        "call_patient", "inform_result", "check_lab", "check_imaging",
+        "follow_up", "medication_review", "procedure_booking", "custom",
+      ] as const;
+      type RT = typeof validTypes[number];
+      let reminderCount = 0;
+      for (const r of pendingReminders) {
+        if (!r.dueDate) continue;
+        const rType: RT = validTypes.includes(r.reminderType as RT)
+          ? (r.reminderType as RT) : "custom";
+        try {
+          await createReminder.mutateAsync({
+            patientId: data.id,
+            reminderType: rType,
+            title: r.title,
+            dueDate: r.dueDate,
+            notes: r.notes ?? undefined,
+            requiresDoctorReview: true,
+          });
+          reminderCount++;
+        } catch (err) {
+          console.error("[PatientForm] Failed to create reminder:", err);
+        }
+      }
+      if (reminderCount > 0) {
+        toast.success(`${reminderCount} AI-suggested reminder${reminderCount > 1 ? "s" : ""} saved — approve in Reminders`);
+      }
       setLocation(`/patients/${data.id}`);
     },
     onError: (err) => toast.error(err.message),
@@ -196,6 +229,11 @@ export default function PatientForm() {
       familyHistory: data.familyHistory ? String(data.familyHistory) : f.familyHistory,
       importantNotes: data.notes ? String(data.notes) : f.importantNotes,
     }));
+    // Capture any AI-extracted reminders — they will be created after patient is saved
+    if (data.reminders && data.reminders.length > 0) {
+      setPendingReminders(data.reminders.filter((r) => r.dueDate));
+      toast.info(`${data.reminders.filter((r) => r.dueDate).length} reminder${data.reminders.filter((r) => r.dueDate).length > 1 ? "s" : ""} detected — will be saved when you create the patient`);
+    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {

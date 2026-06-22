@@ -37,6 +37,14 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type ExtractedReminder = {
+  title: string;
+  reminderType: string;
+  dueDate: string | null;
+  dueTime?: string | null;
+  notes?: string | null;
+};
+
 export type PatientExtractedData = {
   name?: string | null;
   phone?: string | null;
@@ -54,6 +62,8 @@ export type PatientExtractedData = {
   surgicalHistory?: string | null;
   familyHistory?: string | null;
   notes?: string | null;
+  // AI-extracted reminder triggers (e.g. "follow up lab at 30/6/2026")
+  reminders?: ExtractedReminder[];
 };
 
 export type VisitExtractedData = {
