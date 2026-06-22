@@ -127,13 +127,34 @@ export async function syncPatientToSheet(patient: Patient): Promise<void> {
         requestBody: { values: [row] },
       });
     } else {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: "Patients!A:P",
-        valueInputOption: "USER_ENTERED",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: { values: [row] },
-      });
+      // Ensure header row exists (row 1 should always be the header)
+      if (rows.length === 0) {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SHEET_ID,
+          range: "Patients!A:P",
+          valueInputOption: "USER_ENTERED",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: { values: [PATIENT_HEADERS, row] },
+        });
+      } else {
+        // Check if row 1 is actually a header (not a data row)
+        const firstRow = rows[0];
+        const isHeaderRow = firstRow && firstRow[0] === "ID";
+        if (!isHeaderRow) {
+          // Sheet has data but no header - prepend header row by doing a full reset
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID, range: "Patients!A1:P1",
+            valueInputOption: "USER_ENTERED", requestBody: { values: [PATIENT_HEADERS] },
+          });
+        }
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SHEET_ID,
+          range: "Patients!A:P",
+          valueInputOption: "USER_ENTERED",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: { values: [row] },
+        });
+      }
     }
     console.log("[Sync] Patient " + patient.id + " synced to sheet");
   } catch (err) {
@@ -303,11 +324,17 @@ export async function createReminderCalendarEvent(params: {
 
     // Build a safe description that includes only the action type,
     // not the patient name or clinical details
+    // Build description — includes patient name/phone since this is Dr. Rania's
+    // private personal calendar (not a shared/public resource).
+    // Title stays safe ("Clinic Follow-up Reminder") per spec; description is private.
+    const patientLine = params.patientName
+      ? "Patient: " + params.patientName + (params.patientPhone ? " | " + params.patientPhone : "") + "\n"
+      : "";
     const safeDescription =
-      "Open the secure clinic app to view patient details and complete this reminder.\n" +
-      "Action type: " + (params.title ?? "Follow-up") + "\n" +
-      "Due: " + params.dueDate +
-      (params.dueTime ? " at " + params.dueTime : "");
+      patientLine +
+      "Action: " + (params.title ?? "Follow-up") + "\n" +
+      "Due: " + params.dueDate + (params.dueTime ? " at " + params.dueTime : "") + "\n\n" +
+      "Open the secure clinic app for full patient details.";
 
     // Parse dueDate and dueTime into RFC3339 for Calendar API
     const startDate = params.dueDate; // YYYY-MM-DD
