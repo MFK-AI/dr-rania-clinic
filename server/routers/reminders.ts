@@ -17,6 +17,12 @@ import { sendTelegramAlert } from "./telegram";
 import { reminders } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
+function requireDoctor(role: string) {
+  if (role !== "doctor" && role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Only the doctor can perform this action." });
+  }
+}
+
 function requireDoctorOrAssistant(role: string) {
   if (role !== "doctor" && role !== "assistant" && role !== "admin") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
@@ -165,5 +171,46 @@ export const remindersRouter = router({
         entityId: input.id,
       });
       return { success: true };
+    }),
+
+  // Doctor approves an auto-extracted reminder for Calendar + Telegram.
+  // Auto-extracted reminders are saved immediately with requiresDoctorReview=true.
+  // This mutation clears that flag and fires Calendar + Telegram.
+  sendToCalendar: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      requireDoctor(ctx.user.role);
+      const reminder = await getReminderById(input.id);
+      if (!reminder) throw new TRPCError({ code: "NOT_FOUND", message: "Reminder not found." });
+      const db = await getDb();
+      if (db) {
+        await db.update(reminders)
+          .set({ requiresDoctorReview: false })
+          .where(eq(reminders.id, input.id));
+      }
+      // Fire Calendar event
+      const calendarEventId = await createReminderCalendarEvent({
+        title: reminder.title ?? "Follow-up",
+        dueDate: reminder.dueDate ?? new Date().toISOString().split("T")[0],
+        dueTime: reminder.dueTime ?? undefined,
+      }).catch((err) => {
+        console.error("[reminders.sendToCalendar] Calendar failed:", err instanceof Error ? err.message : err);
+        return null;
+      });
+      // Fire Telegram
+      await sendTelegramAlert(
+        "🔔 *Reminder Approved for Calendar*\n" +
+        "📋 " + (reminder.title ?? "Follow-up") + "\n" +
+        "📅 Due: " + (reminder.dueDate ?? "TBD") + "\n" +
+        "✅ Approved by Dr. Rania — open the clinic app for full details."
+      ).catch(() => {});
+      await logAuditEvent({
+        userId: ctx.user.id,
+        action: "create_reminder",
+        entityType: "reminder",
+        entityId: input.id,
+        metadata: { calendarEventId, approvedForCalendar: true },
+      });
+      return { success: true, calendarEventId };
     }),
 });

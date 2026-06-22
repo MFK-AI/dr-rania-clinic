@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { AlertTriangle, Bell, Calendar, Check, Plus, X } from "lucide-react";
+import { AlertTriangle, Bell, Calendar, CalendarDays, Check, Plus, X } from "lucide-react";
 import { useState, useMemo } from "react";
 
 type ReminderStatus = "pending" | "done" | "overdue" | "cancelled" | "postponed";
@@ -80,6 +80,14 @@ export default function Reminders() {
       utils.reminders.listAll.invalidate();
       setShowNewDialog(false);
       setNewForm({ patientId: "", title: "", description: "", dueDate: "", reminderType: "follow_up" });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const sendToCalendar = trpc.reminders.sendToCalendar.useMutation({
+    onSuccess: () => {
+      toast.success("Reminder approved — Calendar and Telegram alert sent");
+      utils.reminders.listAll.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -346,30 +354,50 @@ export default function Reminders() {
                       <span className="text-xs text-muted-foreground capitalize">
                         {reminder.reminderType?.replace(/_/g, " ")}
                       </span>
+                      {reminder.requiresDoctorReview && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                          ⏳ Needs Calendar Approval
+                        </span>
+                      )}
                     </div>
                   </div>
-                  {reminder.status !== "done" && reminder.status !== "cancelled" && (
-                    <div className="flex gap-1.5 shrink-0">
+                  <div className="flex flex-col gap-1.5 shrink-0 items-end">
+                    {reminder.requiresDoctorReview && reminder.status !== "done" && reminder.status !== "cancelled" && (
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-success hover:text-success hover:bg-success/10"
-                        onClick={() => completeReminder.mutate({ id: reminder.id })}
-                        title="Mark as done"
+                        className="h-7 gap-1 text-xs px-2 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border-0"
+                        variant="outline"
+                        onClick={() => sendToCalendar.mutate({ id: reminder.id })}
+                        disabled={sendToCalendar.isPending}
+                        title="Approve — send to Google Calendar + Telegram"
                       >
-                        <Check className="h-3.5 w-3.5" />
+                        <CalendarDays className="h-3 w-3" />
+                        Approve
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => cancelReminder.mutate({ id: reminder.id })}
-                        title="Cancel"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
+                    )}
+                    {reminder.status !== "done" && reminder.status !== "cancelled" && (
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-success hover:text-success hover:bg-success/10"
+                          onClick={() => completeReminder.mutate({ id: reminder.id })}
+                          title="Mark as done"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => cancelReminder.mutate({ id: reminder.id })}
+                          title="Cancel"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
