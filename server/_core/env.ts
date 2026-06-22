@@ -9,6 +9,15 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   // Google Sheets & Calendar (replaces gws CLI that isn't available on Railway)
   googleClientEmail: process.env.GOOGLE_CLIENT_EMAIL ?? "",
-  googlePrivateKey: (process.env.GOOGLE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
+  googlePrivateKey: (() => {
+    let key = process.env.GOOGLE_PRIVATE_KEY ?? "";
+    // Strip surrounding quotes accidentally included when copying from JSON
+    key = key.replace(/^["']+|["']+$/g, "");
+    // Convert literal \n (backslash+n) to actual newlines (standard JSON format)
+    key = key.replace(/\\n/g, "\n");
+    // Normalize Windows line endings
+    key = key.replace(/\r\n/g, "\n");
+    return key.trim();
+  })(),
   googleSheetId: process.env.GOOGLE_SHEET_ID ?? "1V9fsOxQwxNXmUn5PrjQhUGKaO48whZYVTIM2cp4ljOo",
 };
