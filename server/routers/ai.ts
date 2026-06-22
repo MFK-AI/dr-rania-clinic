@@ -4,6 +4,8 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM, type Message } from "../_core/llm";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { storageGetSignedUrl } from "../storage";
+import { createReminderCalendarEvent } from "./sync";
+import { sendTelegramAlert } from "./telegram";
 import {
   approveAiExtraction,
   createAiExtraction,
@@ -401,7 +403,7 @@ export const aiRouter = router({
       // Mark extraction as approved
       await approveAiExtraction(input.extractionId, ctx.user.id);
 
-      // Create approved reminders
+      // Create approved reminders and fire Calendar + Telegram for each one
       for (const r of input.approvedReminders) {
         await createReminder({
           patientId: r.patientId,
@@ -413,6 +415,23 @@ export const aiRouter = router({
           notes: r.notes,
           createdBy: ctx.user.id,
         });
+
+        // Fire Calendar and Telegram non-blocking after doctor approval.
+        // Calendar title is intentionally safe (no patient name/clinical detail)
+        // per the project safety spec -- full detail is in the app only.
+        createReminderCalendarEvent({
+          title: r.title,
+          dueDate: r.dueDate,
+          dueTime: r.dueTime,
+        }).catch((err) => console.error("[ai.approve] Calendar event failed:", err));
+
+        sendTelegramAlert(
+          `🔔 *Reminder Approved*\n` +
+          `📋 ${r.title}\n` +
+          `📅 Due: ${r.dueDate}${r.dueTime ? " at " + r.dueTime : ""}\n` +
+          `🏷️ Type: ${r.reminderType.replace(/_/g, " ")}\n` +
+          `✅ Approved by Dr. Rania — open the clinic app to view full details.`
+        ).catch((err) => console.error("[ai.approve] Telegram alert failed:", err));
       }
 
       await logAuditEvent({

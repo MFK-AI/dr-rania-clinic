@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import VoiceRecorder, { type VoiceRecorderResult } from "@/components/VoiceRecorder";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { BrainCircuit, Check, ChevronRight, RefreshCw, Mic } from "lucide-react";
+import { BrainCircuit, Bell, Check, ChevronRight, RefreshCw, Mic } from "lucide-react";
 import { useState, useMemo } from "react";
 
 type ExtractedData = {
@@ -25,12 +26,30 @@ type ExtractedData = {
   risk_flags?: string[];
   unclear_words_or_phrases?: string[];
   missing_documentation_items?: string[];
+  reminders?: Array<{
+    // normalized shape (from extractRemindersFromVisit)
+    title?: string;
+    reminderType?: string;
+    dueDate?: string;
+    dueTime?: string;
+    notes?: string;
+    priority?: string;
+    // raw shape from voice/screenshot extraction (AiReminderSuggestion)
+    reminder_title?: string;
+    reminder_type?: string;
+    due_date?: string;
+    due_time?: string;
+    action_required?: string;
+    sensitivity_level?: string;
+  }>;
 };
 
 export default function AiReview() {
   const { data: pending, isLoading, refetch } = trpc.ai.listPending.useQuery();
   const utils = trpc.useUtils();
   const [activeId, setActiveId] = useState<number | null>(null);
+  // Track which AI-suggested reminders the doctor has checked for each extraction
+  const [approvedReminderIds, setApprovedReminderIds] = useState<Record<number, Set<number>>>({});
 
   // ── Voice recorder state ─────────────────────────────────────────────────
   const [showRecorder, setShowRecorder] = useState(false);
@@ -296,6 +315,70 @@ export default function AiReview() {
                       </div>
                     )}
 
+                    {/* AI-Suggested Reminders — doctor reviews and selects which to approve */}
+                    {Array.isArray(data?.reminders) && data.reminders.length > 0 && (() => {
+                      // Normalize both raw (AiReminderSuggestion) and processed reminder shapes
+                      type NormalizedReminder = {
+                        title: string; reminderType: string; dueDate: string;
+                        dueTime?: string; notes?: string; priority?: string;
+                      };
+                      const normalized: NormalizedReminder[] = data.reminders.map((r) => ({
+                        title: r.title ?? r.reminder_title ?? "Follow-up",
+                        reminderType: r.reminderType ?? r.reminder_type ?? "custom",
+                        dueDate: r.dueDate ?? r.due_date ?? new Date().toISOString().split("T")[0],
+                        dueTime: r.dueTime ?? r.due_time ?? undefined,
+                        notes: r.notes ?? r.action_required ?? undefined,
+                        priority: r.priority ?? r.sensitivity_level ?? undefined,
+                      }));
+                      return normalized.length > 0 ? (
+                        <div className="border border-primary/20 rounded-lg p-3 bg-primary/5">
+                          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <Bell className="h-3.5 w-3.5" />
+                            AI-Suggested Reminders — select to approve
+                          </p>
+                          <div className="space-y-2">
+                            {normalized.map((r, i) => {
+                              const isChecked = approvedReminderIds[extraction.id]?.has(i) ?? false;
+                              return (
+                                <label
+                                  key={i}
+                                  className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                                    isChecked ? "bg-primary/10" : "hover:bg-muted/50"
+                                  }`}
+                                >
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onCheckedChange={(checked) => {
+                                      setApprovedReminderIds((prev) => {
+                                        const set = new Set(prev[extraction.id] ?? []);
+                                        if (checked) set.add(i); else set.delete(i);
+                                        return { ...prev, [extraction.id]: set };
+                                      });
+                                    }}
+                                    className="mt-0.5 shrink-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-foreground">{r.title}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      📅 {r.dueDate}{r.dueTime ? ` at ${r.dueTime}` : ""} ·{" "}
+                                      <span className="capitalize">{r.reminderType.replace(/_/g, " ")}</span>
+                                      {r.priority && ` · ${r.priority} priority`}
+                                    </p>
+                                    {r.notes && (
+                                      <p className="text-xs text-muted-foreground/70 mt-0.5 truncate">{r.notes}</p>
+                                    )}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground/60 mt-2">
+                            Checked reminders will be saved and synced to Google Calendar + Telegram on approval.
+                          </p>
+                        </div>
+                      ) : null;
+                    })()}
+
                     <div className="flex gap-2 justify-end pt-2">
                       <Button
                         size="sm"
@@ -306,6 +389,36 @@ export default function AiReview() {
                             toast.error("No visit associated with this extraction. Link it to a visit first.");
                             return;
                           }
+                          // Build approved reminders from checked items
+                          // Normalize both raw and processed reminder shapes (same as rendering above)
+                          type NormR = { title: string; reminderType: string; dueDate: string; dueTime?: string; notes?: string };
+                          const allReminders: NormR[] = Array.isArray(data?.reminders)
+                            ? data.reminders.map((r: Record<string, string | undefined>) => ({
+                                title: r.title ?? r.reminder_title ?? "Follow-up",
+                                reminderType: r.reminderType ?? r.reminder_type ?? "custom",
+                                dueDate: r.dueDate ?? r.due_date ?? new Date().toISOString().split("T")[0],
+                                dueTime: r.dueTime ?? r.due_time ?? undefined,
+                                notes: r.notes ?? r.action_required ?? undefined,
+                              }))
+                            : [];
+                          const checkedIndices = approvedReminderIds[extraction.id] ?? new Set();
+                          const validTypes = [
+                            "call_patient", "inform_result", "check_lab", "check_imaging",
+                            "follow_up", "medication_review", "procedure_booking", "custom",
+                          ] as const;
+                          type ReminderType = typeof validTypes[number];
+                          const selectedReminders = allReminders
+                            .filter((_, i) => checkedIndices.has(i))
+                            .map((r) => ({
+                              reminderType: (validTypes.includes(r.reminderType as ReminderType)
+                                ? r.reminderType
+                                : "custom") as ReminderType,
+                              title: r.title,
+                              dueDate: r.dueDate,
+                              dueTime: r.dueTime,
+                              notes: r.notes,
+                              patientId: extraction.patientId ?? 0,
+                            }));
                           approveExtraction.mutate({
                             extractionId: extraction.id,
                             visitId: extraction.visitId,
@@ -321,13 +434,18 @@ export default function AiReview() {
                               advice: data?.advice ?? undefined,
                               followUpPlan: data?.follow_up_plan ?? undefined,
                             },
-                            approvedReminders: [],
+                            approvedReminders: selectedReminders,
                           });
                         }}
                         disabled={approveExtraction.isPending}
                       >
                         <Check className="h-3.5 w-3.5" />
                         Approve &amp; Apply
+                        {(approvedReminderIds[extraction.id]?.size ?? 0) > 0 && (
+                          <span className="ml-1 bg-white/20 text-white rounded-full px-1.5 py-0.5 text-xs">
+                            +{approvedReminderIds[extraction.id]?.size} reminder{approvedReminderIds[extraction.id]?.size !== 1 ? "s" : ""}
+                          </span>
+                        )}
                       </Button>
                     </div>
                   </CardContent>
