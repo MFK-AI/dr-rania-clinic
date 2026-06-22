@@ -278,6 +278,40 @@ export const aiRouter = router({
         await updateVisit(input.visitId, { status: "ai_review", aiExtractionId: extractionId }, ctx.user.id);
       }
 
+      // Step 6: Auto-save reminder suggestions to the reminders table immediately.
+      // Reminders are marked requiresDoctorReview=true so they appear in the
+      // Reminders center but Calendar/Telegram only fires after doctor approves.
+      // Patient is optional here -- will be set if patientId was provided.
+      const autoReminders = extractedData.reminders ?? [];
+      if (autoReminders.length > 0 && input.patientId) {
+        const validTypes = [
+          "call_patient", "inform_result", "check_lab", "check_imaging",
+          "follow_up", "medication_review", "procedure_booking", "custom",
+        ] as const;
+        type RT = typeof validTypes[number];
+        for (const r of autoReminders) {
+          const rType: RT = validTypes.includes(r.reminder_type as RT)
+            ? (r.reminder_type as RT)
+            : "custom";
+          if (!r.due_date) continue; // skip reminders with no date
+          try {
+            await createReminder({
+              patientId: input.patientId,
+              visitId: input.visitId ?? null,
+              reminderType: rType,
+              title: r.reminder_title ?? "Follow-up",
+              dueDate: r.due_date,
+              notes: r.action_required ?? null,
+              requiresDoctorReview: true,
+              createdBy: ctx.user.id,
+              sourceText: "Auto-extracted from voice note",
+            });
+          } catch (err) {
+            console.error("[transcribeAndExtract] Failed to auto-save reminder:", err);
+          }
+        }
+      }
+
       return {
         extractionId,
         transcript,
@@ -512,7 +546,7 @@ export const aiRouter = router({
     .mutation(async ({ ctx, input }) => {
       requireDoctorOrAssistant(ctx.user.role);
       const systemPrompt = `You are a medical data extraction assistant for an OB-GYN clinic.
-Extract ALL patient demographic and medical history information from the provided image.
+Extract ALL patient demographic, medical history, AND reminder triggers from the provided image.
 The image may be a handwritten form, printed form, screenshot, or any clinical document.
 Return ONLY a valid JSON object with these exact keys (use null for missing fields, no extra keys):
 {
@@ -531,10 +565,14 @@ Return ONLY a valid JSON object with these exact keys (use null for missing fiel
   "currentMedications": null,
   "surgicalHistory": null,
   "familyHistory": null,
-  "notes": null
+  "notes": null,
+  "reminders": []
 }
 For maritalStatus use one of: single, married, divorced, widowed, or null.
 For pregnancyStatus use one of: not_pregnant, pregnant, postpartum, or null.
+For reminders: extract ANY follow-up, lab result, appointment, or action reminder mentioned in the image.
+Each reminder must be an object: { "title": string, "reminderType": "call_patient"|"inform_result"|"check_lab"|"check_imaging"|"follow_up"|"medication_review"|"procedure_booking"|"custom", "dueDate": "YYYY-MM-DD or null", "notes": string or null }
+Convert relative date expressions (e.g. "30/6/2026", "next week") to ISO date format YYYY-MM-DD using today as ${new Date().toISOString().split("T")[0]}.
 Do not include markdown, code fences, or any text outside the JSON object.`;
       try {
         const resolvedImageUrl = await resolveImageUrlForLLM(input.imageUrl);

@@ -153,7 +153,7 @@ function DashboardLayoutContent({
                   <img
                     src="/logo.png"
                     alt="Dr. Rania Mousa Clinic"
-                    className="h-9 w-9 rounded-full object-cover shrink-0 ring-2 ring-sidebar-primary/30"
+                    className="h-9 w-9 rounded-full object-contain bg-white shrink-0 ring-2 ring-sidebar-primary/30 p-0.5"
                   />
                   <div className="min-w-0">
                     <p className="text-sm font-display font-semibold text-sidebar-foreground truncate">
@@ -169,7 +169,7 @@ function DashboardLayoutContent({
                 <img
                   src="/logo.png"
                   alt="Dr. Rania Mousa Clinic"
-                  className="h-8 w-8 rounded-full object-cover shrink-0 ring-2 ring-sidebar-primary/30"
+                  className="h-8 w-8 rounded-full object-contain bg-white shrink-0 ring-2 ring-sidebar-primary/30 p-0.5"
                 />
               )}
             </div>
