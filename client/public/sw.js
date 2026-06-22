@@ -8,7 +8,7 @@
  * Version bumped on every deploy via CACHE_VERSION constant.
  */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_STATIC  = 'dr-rania-static-'  + CACHE_VERSION;
 const CACHE_PAGES   = 'dr-rania-pages-'   + CACHE_VERSION;
 
