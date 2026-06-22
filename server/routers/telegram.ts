@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { logTelegramAlert, getOverdueReminders, getTodaysVisits, listPatients } from "../db";
+import { logTelegramAlert, getOverdueReminders, getTodaysVisits, listPatients, getAllUsers } from "../db";
 
 const TELEGRAM_API = "https://api.telegram.org";
 
@@ -11,10 +11,7 @@ function requireDoctor(role: string) {
   }
 }
 
-export async function sendTelegramMessage(message: string, parseMode: "HTML" | "Markdown" = "HTML"): Promise<boolean> {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) return false;
+async function sendToOne(botToken: string, chatId: string, message: string, parseMode: "HTML" | "Markdown"): Promise<boolean> {
   try {
     const res = await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
       method: "POST",
@@ -25,6 +22,37 @@ export async function sendTelegramMessage(message: string, parseMode: "HTML" | "
   } catch {
     return false;
   }
+}
+
+// Broadcasts to all recipients: the TELEGRAM_CHAT_ID env var AND every active
+// user who has a personal telegramChatId set in their profile.
+// Deduplicates chat IDs so no one gets the message twice.
+export async function sendTelegramMessage(message: string, parseMode: "HTML" | "Markdown" = "HTML"): Promise<boolean> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return false;
+
+  // Collect all unique chat IDs
+  const chatIds = new Set<string>();
+  if (process.env.TELEGRAM_CHAT_ID) chatIds.add(process.env.TELEGRAM_CHAT_ID);
+
+  // Add every active user's personal Telegram chat ID
+  try {
+    const allUsers = await getAllUsers();
+    for (const u of allUsers) {
+      if (u.isActive && u.telegramChatId) chatIds.add(u.telegramChatId);
+    }
+  } catch {
+    // Non-fatal — fall through to send to env var recipient at minimum
+  }
+
+  if (chatIds.size === 0) return false;
+
+  let anySuccess = false;
+  for (const chatId of Array.from(chatIds)) {
+    const ok = await sendToOne(botToken, chatId, message, parseMode);
+    if (ok) anySuccess = true;
+  }
+  return anySuccess;
 }
 
 // ─── Rich message formatters ────────────────────────────────────────────────

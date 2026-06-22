@@ -102,6 +102,7 @@ export const customAuthRouter = router({
       email: z.string().email(),
       password: z.string().min(8, "Password must be at least 8 characters"),
       role: z.enum(["doctor", "assistant", "admin"]),
+      telegramChatId: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       if (ctx.user.role !== "doctor" && ctx.user.role !== "admin") {
@@ -127,6 +128,7 @@ export const customAuthRouter = router({
         openId,
         name: input.name,
         email: input.email.toLowerCase().trim(),
+        telegramChatId: input.telegramChatId?.trim() || null,
         passwordHash,
         loginMethod: "password",
         role: input.role,
