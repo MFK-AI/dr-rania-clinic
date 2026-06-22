@@ -219,6 +219,18 @@ export async function runMigrations() {
       )
     `);
 
+    // ── Add new columns to existing tables (idempotent ALTER TABLE) ──────────
+    // MySQL: ADD COLUMN is a no-op if the column already exists when using
+    // IF NOT EXISTS (MySQL 8.0.3+). Safe to run on every startup.
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`title\` varchar(32) NULL`);
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`specialty\` varchar(128) NULL`);
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`dateOfBirth\` varchar(20) NULL`);
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`address\` text NULL`);
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`country\` varchar(64) NULL`);
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`emirate\` varchar(64) NULL`);
+    await db.execute(sql`ALTER TABLE \`users\` ADD COLUMN IF NOT EXISTS \`mobileNumber\` varchar(32) NULL`);
+    console.log("[migrate] Profile columns ensured on users table.");
+
     // Seed Dr. Rania's account if it doesn't exist
     const existing = await db.execute(sql`SELECT id FROM \`users\` WHERE openId = 'local_dr_rania_001' LIMIT 1`);
     const rows = (existing as unknown as { rows?: unknown[] }).rows ?? (existing as unknown as unknown[]);
