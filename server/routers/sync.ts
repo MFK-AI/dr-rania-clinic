@@ -268,15 +268,86 @@ export async function createReminderCalendarEvent(params: {
   title?: string; dueDate: string; dueTime?: string;
   patientName?: string; patientPhone?: string; reminderText?: string;
 }): Promise<string | null> {
-  console.log("[Sync] Reminder calendar event requested:", params.title);
-  return null;
+  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+    console.warn("[Sync] Google credentials not configured -- skipping calendar event");
+    return null;
+  }
+  try {
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: ENV.googleClientEmail,
+        private_key: ENV.googlePrivateKey,
+      },
+      scopes: [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/calendar",
+      ],
+    });
+    const calendar = google.calendar({ version: "v3", auth });
+
+    // Build a safe calendar event title that contains no clinical detail
+    // per the project safety spec: calendar titles must not expose patient
+    // names or clinical information
+    const safeTitle = "Clinic Follow-up Reminder";
+
+    // Build a safe description that includes only the action type,
+    // not the patient name or clinical details
+    const safeDescription =
+      "Open the secure clinic app to view patient details and complete this reminder.\n" +
+      "Action type: " + (params.title ?? "Follow-up") + "\n" +
+      "Due: " + params.dueDate +
+      (params.dueTime ? " at " + params.dueTime : "");
+
+    // Parse dueDate and dueTime into RFC3339 for Calendar API
+    const startDate = params.dueDate; // YYYY-MM-DD
+    let start: Record<string, string>;
+    let end: Record<string, string>;
+
+    if (params.dueTime) {
+      // Time-specific event: 30-minute block
+      const startDt = startDate + "T" + params.dueTime + ":00";
+      const [h, m] = params.dueTime.split(":").map(Number);
+      const endMin = ((m ?? 0) + 30) % 60;
+      const endH = (h ?? 0) + Math.floor(((m ?? 0) + 30) / 60);
+      const endTime = String(endH).padStart(2, "0") + ":" + String(endMin).padStart(2, "0") + ":00";
+      start = { dateTime: startDt, timeZone: "Asia/Dubai" };
+      end = { dateTime: startDate + "T" + endTime, timeZone: "Asia/Dubai" };
+    } else {
+      // All-day event
+      start = { date: startDate };
+      end = { date: startDate };
+    }
+
+    const event = await calendar.events.insert({
+      calendarId: CALENDAR_ID,
+      requestBody: {
+        summary: safeTitle,
+        description: safeDescription,
+        start,
+        end,
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: "popup", minutes: 30 },
+            { method: "email", minutes: 60 },
+          ],
+        },
+      },
+    });
+
+    console.log("[Sync] Calendar reminder event created:", event.data.id);
+    return event.data.id ?? null;
+  } catch (err) {
+    console.error("[Sync] Failed to create calendar reminder event:", err);
+    return null;
+  }
 }
 
 export async function createVisitCalendarEvent(params: {
   patientName?: string; visitDate: string; visitLocation?: string;
   patientPhone?: string; visitType?: string; chiefComplaint?: string; location?: string;
 }): Promise<string | null> {
-  console.log("[Sync] Visit calendar event requested:", params.patientName);
+  console.log("[Sync] Visit calendar event requested:", params.visitDate);
   return null;
 }
 
