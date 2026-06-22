@@ -16,6 +16,7 @@ import {
   getVisitById,
   logAuditEvent,
   searchPatients,
+  updateAiExtractionPatient,
   updateVisit,
 } from "../db";
 import type { AiExtractionResult } from "../../shared/types";
@@ -389,6 +390,10 @@ export const aiRouter = router({
             })
           )
           .default([]),
+        // Doctor-confirmed patient ID when the extraction has no patient linked.
+        // Sent from the patient picker UI in AiReview and persisted to the DB
+        // so it survives page reloads and is reliable on the server side.
+        patientOverride: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -412,8 +417,21 @@ export const aiRouter = router({
       await approveAiExtraction(input.extractionId, ctx.user.id);
 
       // Resolve the patient for reminder linking.
-      // Priority order: visit.patientId → extracted phone → extracted name → override
-      let resolvedPatientId: number | null = visit?.patientId ?? null;
+      // Priority: patientOverride (doctor-confirmed) → visit.patientId
+      // → extracted phone → extracted name
+      let resolvedPatientId: number | null = null;
+
+      // 1. Doctor explicitly selected a patient in the UI — most reliable
+      if (input.patientOverride && input.patientOverride > 0) {
+        resolvedPatientId = input.patientOverride;
+        // Persist to the extraction record so future page loads show it linked
+        await updateAiExtractionPatient(input.extractionId, input.patientOverride);
+      }
+
+      // 2. Visit already has a patient linked
+      if (!resolvedPatientId && visit?.patientId) {
+        resolvedPatientId = visit.patientId;
+      }
       if (!resolvedPatientId) {
         const extraction = await getAiExtractionById(input.extractionId);
         const extracted = extraction?.extractedData as Record<string, unknown> | null;

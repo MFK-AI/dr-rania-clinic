@@ -461,6 +461,10 @@ export default function AiReview() {
                           approveExtraction.mutate({
                             extractionId: extraction.id,
                             visitId: extraction.visitId ?? undefined,
+                            // Send the doctor-selected patient override explicitly
+                            // so the server can persist it and use it reliably
+                            // (React state resets on page reload; DB doesn't)
+                            patientOverride: patientOverrides[extraction.id] ?? undefined,
                             finalData: {
                               reasonForVisit: data?.reason_for_visit ?? undefined,
                               diagnosis: data?.diagnosis ?? undefined,

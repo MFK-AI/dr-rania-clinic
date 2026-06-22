@@ -604,3 +604,9 @@ export async function getDashboardStats() {
     exportsGenerated: Number(exportsResult[0]?.count ?? 0),
   };
 }
+
+export async function updateAiExtractionPatient(id: number, patientId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(aiExtractions).set({ patientId }).where(eq(aiExtractions.id, id));
+}
