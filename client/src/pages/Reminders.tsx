@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { AlertTriangle, Bell, Calendar, CalendarDays, Check, Plus, X } from "lucide-react";
+import { AlertTriangle, Bell, Calendar, CalendarDays, Check, ChevronDown, ChevronUp, ExternalLink, Plus, X } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 
 type ReminderStatus = "pending" | "done" | "overdue" | "cancelled" | "postponed";
 type ReminderType =
@@ -50,6 +51,8 @@ export default function Reminders() {
     reminderType: "follow_up" as ReminderType,
   });
   const [patientSearch, setPatientSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [, setLocation] = useLocation();
 
   const { data: reminders, isLoading } = trpc.reminders.listAll.useQuery({ limit: 200 });
   const { data: patientList } = trpc.patients.list.useQuery(
@@ -308,9 +311,10 @@ export default function Reminders() {
           {filtered.map((reminder) => (
             <Card
               key={reminder.id}
-              className={`border shadow-sm ${
+              className={`border shadow-sm cursor-pointer transition-colors ${
                 reminder.status === "overdue" ? "border-destructive/30" : ""
               }`}
+              onClick={() => setExpandedId((prev) => prev === reminder.id ? null : reminder.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
@@ -333,7 +337,12 @@ export default function Reminders() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium">{reminder.title}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-medium truncate">{reminder.title}</p>
+                        {expandedId === reminder.id
+                          ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                      </div>
                       <Badge className={`text-xs shrink-0 ${STATUS_CLASSES[reminder.status] ?? ""}`}>
                         {STATUS_LABELS[reminder.status] ?? reminder.status}
                       </Badge>
@@ -346,11 +355,19 @@ export default function Reminders() {
                         <Calendar className="h-3 w-3" />
                         Due: {reminder.dueDate}
                       </span>
-                      {reminder.patientId && (
-                        <span className="text-xs text-muted-foreground">
-                          Patient #{reminder.patientId}
-                        </span>
-                      )}
+                      {reminder.patientId && (() => {
+                        const pt = patientList?.find((p) => p.id === reminder.patientId);
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setLocation(`/patients/${reminder.patientId}`); }}
+                            className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                          >
+                            {pt ? pt.name : `Patient #${reminder.patientId}`}
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </button>
+                        );
+                      })()}
                       <span className="text-xs text-muted-foreground capitalize">
                         {reminder.reminderType?.replace(/_/g, " ")}
                       </span>
@@ -399,6 +416,32 @@ export default function Reminders() {
                     )}
                   </div>
                 </div>
+                  {/* Expanded detail section */}
+                  {expandedId === reminder.id && (
+                    <div
+                      className="mt-3 pt-3 border-t border-border/50 space-y-1.5 text-xs text-muted-foreground"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {reminder.sourceText && (
+                        <p><span className="font-medium text-foreground/70">Source:</span> {reminder.sourceText}</p>
+                      )}
+                      {reminder.completionNote && (
+                        <p><span className="font-medium text-foreground/70">Completion note:</span> {reminder.completionNote}</p>
+                      )}
+                      {reminder.completedAt && (
+                        <p><span className="font-medium text-foreground/70">Completed at:</span> {new Date(reminder.completedAt).toLocaleString("en-AE", { timeZone: "Asia/Dubai" })}</p>
+                      )}
+                      {reminder.patientId && (
+                        <button
+                          type="button"
+                          onClick={() => setLocation(`/patients/${reminder.patientId}`)}
+                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                        >
+                          Open patient profile <ExternalLink className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
               </CardContent>
             </Card>
           ))}

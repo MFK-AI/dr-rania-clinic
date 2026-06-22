@@ -88,7 +88,7 @@ export default function Dashboard() {
             <img
               src="/logo.png"
               alt="Dr. Rania Mousa Clinic"
-              className="h-16 w-16 rounded-full object-contain bg-white/10 ring-2 ring-white/30 shadow-lg shrink-0 p-0.5"
+              className="h-16 w-16 rounded-full object-cover shadow-lg shrink-0 scale-110"
             />
             <div>
               <h1 className="text-2xl font-display font-semibold text-white">
@@ -166,7 +166,7 @@ export default function Dashboard() {
             icon={Users}
             label="New Patients (Week)"
             value={stats?.newPatientsThisWeek ?? 0}
-            color="bg-primary text-primary-foreground"
+            color="bg-primary text-white"
             onClick={() => setLocation("/patients")}
           />
           <StatCard

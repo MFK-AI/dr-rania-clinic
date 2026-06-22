@@ -188,11 +188,16 @@ export const remindersRouter = router({
           .set({ requiresDoctorReview: false })
           .where(eq(reminders.id, input.id));
       }
-      // Fire Calendar event
+      // Fetch patient for name + phone in calendar event and Telegram
+      const patient = reminder.patientId ? await getPatientById(reminder.patientId) : null;
+
+      // Fire Calendar event — include patient name in description (private calendar)
       const calendarEventId = await createReminderCalendarEvent({
         title: reminder.title ?? "Follow-up",
         dueDate: reminder.dueDate ?? new Date().toISOString().split("T")[0],
         dueTime: reminder.dueTime ?? undefined,
+        patientName: patient?.name ?? undefined,
+        patientPhone: patient?.phone ?? undefined,
       }).catch((err) => {
         console.error("[reminders.sendToCalendar] Calendar failed:", err instanceof Error ? err.message : err);
         return null;
@@ -200,9 +205,10 @@ export const remindersRouter = router({
       // Fire Telegram
       await sendTelegramAlert(
         "🔔 *Reminder Approved for Calendar*\n" +
+        (patient ? "👤 " + patient.name + " (" + patient.phone + ")\n" : "") +
         "📋 " + (reminder.title ?? "Follow-up") + "\n" +
         "📅 Due: " + (reminder.dueDate ?? "TBD") + "\n" +
-        "✅ Approved by Dr. Rania — open the clinic app for full details."
+        "✅ Approved — open the clinic app for full details."
       ).catch(() => {});
       await logAuditEvent({
         userId: ctx.user.id,
