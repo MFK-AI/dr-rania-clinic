@@ -149,14 +149,28 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-sidebar-foreground/60" />
               </button>
               {!isCollapsed && (
-                <div className="min-w-0">
-                  <p className="text-sm font-display font-semibold text-sidebar-foreground truncate">
-                    Dr. Rania Khalil
-                  </p>
-                  <p className="text-xs text-sidebar-foreground/50 truncate">
-                    drmousa.clinic
-                  </p>
+                <div className="flex items-center gap-2 min-w-0">
+                  <img
+                    src="/logo.png"
+                    alt="Dr. Rania Mousa Clinic"
+                    className="h-9 w-9 rounded-full object-cover shrink-0 ring-2 ring-sidebar-primary/30"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-display font-semibold text-sidebar-foreground truncate">
+                      Dr. Rania Khalil
+                    </p>
+                    <p className="text-xs text-sidebar-foreground/50 truncate">
+                      drmousa.clinic
+                    </p>
+                  </div>
                 </div>
+              )}
+              {isCollapsed && (
+                <img
+                  src="/logo.png"
+                  alt="Dr. Rania Mousa Clinic"
+                  className="h-8 w-8 rounded-full object-cover shrink-0 ring-2 ring-sidebar-primary/30"
+                />
               )}
             </div>
           </SidebarHeader>

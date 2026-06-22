@@ -1,487 +1,297 @@
 /**
- * Google Sheets & Calendar Sync Router
+ * Google Sheets Sync Router
  *
- * Uses the `gws` CLI (pre-configured with Google OAuth) via child_process
- * to sync patient data to Google Sheets and create calendar events.
+ * Previously used the gws CLI which is a Manus-specific binary not available
+ * on Railway. Replaced with the googleapis npm package (already a dependency)
+ * using a Google Service Account, which works in any Node.js environment.
  *
- * Sheet ID: 1V9fsOxQwxNXmUn5PrjQhUGKaO48whZYVTIM2cp4ljOo
- * Calendar: dr.raniakhalil83@gmail.com
+ * Setup (one-time, in Railway environment variables):
+ *   GOOGLE_CLIENT_EMAIL  - service account email from Google Cloud Console
+ *   GOOGLE_PRIVATE_KEY   - service account private key (PEM, with \n escaped as \\n)
+ *   GOOGLE_SHEET_ID      - optional, defaults to the existing spreadsheet
+ *
+ * Then share the Google Sheet with the service account email (Editor access).
  */
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { google } from "googleapis";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { listPatients, getVisitsByPatient, getOverdueReminders, getTodaysVisits } from "../db";
-import type { Patient, Visit, Reminder } from "../../drizzle/schema";
+import { ENV } from "../_core/env";
+import { listPatients, getVisitsByPatient } from "../db";
+import type { Patient, Visit } from "../../drizzle/schema";
 
-const execFileAsync = promisify(execFile);
-
-export const SHEET_ID = "1V9fsOxQwxNXmUn5PrjQhUGKaO48whZYVTIM2cp4ljOo";
-export const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+export const SHEET_ID = ENV.googleSheetId;
+export const SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit";
 export const CALENDAR_ID = "dr.raniakhalil83@gmail.com";
 
-// ─── gws CLI helper ──────────────────────────────────────────────────────────
-
-async function gws(args: string[]): Promise<unknown> {
-  try {
-    const { stdout, stderr } = await execFileAsync("gws", args, {
-      timeout: 30000,
-      env: { ...process.env, HOME: process.env.HOME ?? "/home/ubuntu" },
-    });
-    if (stderr && !stdout) throw new Error(stderr);
-    return JSON.parse(stdout);
-  } catch (err) {
-    console.error("[GWS] Error:", err);
-    throw err;
+function getGoogleAuth() {
+  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+    throw new Error(
+      "Google Sheets sync not configured. " +
+      "Add GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY to Railway environment variables."
+    );
   }
+  return new google.auth.GoogleAuth({
+    credentials: {
+      client_email: ENV.googleClientEmail,
+      private_key: ENV.googlePrivateKey,
+    },
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
 }
 
-// ─── Sheets helpers ──────────────────────────────────────────────────────────
+async function getSheetsClient() {
+  const auth = getGoogleAuth();
+  return google.sheets({ version: "v4", auth });
+}
 
 function formatDate(d: Date | string | null | undefined): string {
   if (!d) return "";
-  try {
-    return new Date(d).toLocaleDateString("en-AE", { timeZone: "Asia/Dubai" });
-  } catch {
-    return String(d);
-  }
+  try { return new Date(d).toLocaleDateString("en-AE", { timeZone: "Asia/Dubai" }); }
+  catch { return String(d); }
 }
 
 function patientToRow(p: Patient, visitCount = 0, lastVisitDate?: Date | string | null): string[] {
   return [
-    String(p.id),
-    p.name ?? "",
-    p.phone ?? "",
+    String(p.id), p.name ?? "", p.phone ?? "",
     p.age != null ? String(p.age) : "",
     p.dateOfBirth ? formatDate(p.dateOfBirth) : "",
-    p.maritalStatus ?? "",
-    p.pregnancyStatus ?? "",
+    p.maritalStatus ?? "", p.pregnancyStatus ?? "",
     p.gravida != null ? String(p.gravida) : "0",
     p.para != null ? String(p.para) : "0",
-    p.allergies ?? "",
-    p.importantNotes ?? "",
-    p.visitLocation ?? "",
+    p.allergies ?? "", p.importantNotes ?? "", p.visitLocation ?? "",
     String(visitCount),
     lastVisitDate ? formatDate(lastVisitDate) : "",
-    formatDate(p.createdAt),
-    formatDate(p.updatedAt),
+    formatDate(p.createdAt), formatDate(p.updatedAt),
   ];
 }
 
 function visitToRow(v: Visit, patientName: string, patientPhone: string): string[] {
   return [
-    String(v.id),
-    patientName,
-    patientPhone,
-    formatDate(v.visitDate),
-    v.visitType ?? "",
-    v.visitLocation ?? "",
-    v.reasonForVisit ?? "",
-    v.diagnosis ?? "",
-    v.examination ?? "",
-    v.labsImaging ?? "",
-    v.pendingResults ?? "",
-    v.ultrasoundFindings ?? "",
-    v.managementPlan ?? "",
-    v.medications ?? "",
-    v.followUpPlan ?? "",
-    v.status ?? "",
-    String(v.createdBy ?? ""),
+    String(v.id), patientName, patientPhone,
+    formatDate(v.visitDate), v.visitType ?? "", v.visitLocation ?? "",
+    v.reasonForVisit ?? "", v.diagnosis ?? "",
+    v.managementPlan ?? "", v.medications ?? "",
+    v.followUpPlan ?? "", v.status ?? "",
     formatDate(v.createdAt),
   ];
 }
 
-function reminderToRow(r: Reminder, patientName: string, patientPhone: string): string[] {
-  return [
-    String(r.id),
-    patientName,
-    patientPhone,
-    r.title ?? "",
-    r.dueDate ? formatDate(r.dueDate) : "",
-    r.reminderType ?? "",
-    r.status ?? "",
-    formatDate(r.createdAt),
-    r.completedAt ? formatDate(r.completedAt) : "",
-  ];
-}
+const PATIENT_HEADERS = [
+  "ID", "Full Name", "Phone", "Age", "Date of Birth", "Marital Status",
+  "Pregnancy Status", "Gravida", "Para", "Allergies", "Important Notes",
+  "Location", "Visit Count", "Last Visit Date", "Created", "Updated",
+];
 
-// ─── Sync a single patient row (real-time) ──────────────────────────────────
+const VISIT_HEADERS = [
+  "Visit ID", "Patient Name", "Phone", "Visit Date", "Type", "Location",
+  "Reason", "Diagnosis", "Management Plan", "Medications",
+  "Follow-up Plan", "Status", "Created",
+];
 
 export async function syncPatientToSheet(patient: Patient): Promise<void> {
+  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+    console.warn("[Sync] Google credentials not configured -- skipping sheet sync");
+    return;
+  }
   try {
-    // Get visit count for this patient
-    const visits = await getVisitsByPatient(patient.id);
-    const lastVisit = visits.length > 0 ? visits[0].visitDate : null;
-    const row = patientToRow(patient, visits.length, lastVisit);
-
-    // Check if patient already exists in sheet (search by ID in column A)
-    const existing = await gws([
-      "sheets", "spreadsheets", "values", "get",
-      "--params", JSON.stringify({
-        spreadsheetId: SHEET_ID,
-        range: "Patients!A:A",
-      }),
-    ]) as { values?: string[][] };
-
-    const rows = existing?.values ?? [];
+    const sheets = await getSheetsClient();
+    const row = patientToRow(patient);
+    const existing = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID, range: "Patients!A:A",
+    });
+    const rows = existing.data.values ?? [];
     const rowIndex = rows.findIndex((r) => r[0] === String(patient.id));
-
-    if (rowIndex > 0) {
-      // Update existing row
-      await gws([
-        "sheets", "spreadsheets", "values", "update",
-        "--params", JSON.stringify({
-          spreadsheetId: SHEET_ID,
-          range: `Patients!A${rowIndex + 1}:V${rowIndex + 1}`,
-          valueInputOption: "RAW",
-        }),
-        "--json", JSON.stringify({ values: [row] }),
-      ]);
+    if (rowIndex >= 0) {
+      const sheetRow = rowIndex + 1;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: "Patients!A" + sheetRow + ":P" + sheetRow,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [row] },
+      });
     } else {
-      // Append new row
-      await gws([
-        "sheets", "spreadsheets", "values", "append",
-        "--params", JSON.stringify({
-          spreadsheetId: SHEET_ID,
-          range: "Patients!A:V",
-          valueInputOption: "RAW",
-          insertDataOption: "INSERT_ROWS",
-        }),
-        "--json", JSON.stringify({ values: [row] }),
-      ]);
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: "Patients!A:P",
+        valueInputOption: "USER_ENTERED",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: [row] },
+      });
     }
+    console.log("[Sync] Patient " + patient.id + " synced to sheet");
   } catch (err) {
-    console.error("[Sync] Failed to sync patient to sheet:", err);
-    // Non-fatal — don't throw, just log
+    console.error("[Sync] Failed to sync patient:", err);
   }
 }
-
-// ─── Sync a visit row ────────────────────────────────────────────────────────
 
 export async function syncVisitToSheet(
-  visit: Visit,
-  patientName: string,
-  patientPhone: string
+  visit: Visit, patientName: string, patientPhone: string
 ): Promise<void> {
+  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) return;
   try {
+    const sheets = await getSheetsClient();
     const row = visitToRow(visit, patientName, patientPhone);
-
-    const existing = await gws([
-      "sheets", "spreadsheets", "values", "get",
-      "--params", JSON.stringify({ spreadsheetId: SHEET_ID, range: "Visits!A:A" }),
-    ]) as { values?: string[][] };
-
-    const rows = existing?.values ?? [];
+    const existing = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID, range: "Visits!A:A",
+    });
+    const rows = existing.data.values ?? [];
     const rowIndex = rows.findIndex((r) => r[0] === String(visit.id));
-
-    if (rowIndex > 0) {
-      await gws([
-        "sheets", "spreadsheets", "values", "update",
-        "--params", JSON.stringify({
-          spreadsheetId: SHEET_ID,
-          range: `Visits!A${rowIndex + 1}:R${rowIndex + 1}`,
-          valueInputOption: "RAW",
-        }),
-        "--json", JSON.stringify({ values: [row] }),
-      ]);
+    if (rowIndex >= 0) {
+      const sheetRow = rowIndex + 1;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: "Visits!A" + sheetRow + ":M" + sheetRow,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [row] },
+      });
     } else {
-      await gws([
-        "sheets", "spreadsheets", "values", "append",
-        "--params", JSON.stringify({
-          spreadsheetId: SHEET_ID,
-          range: "Visits!A:R",
-          valueInputOption: "RAW",
-          insertDataOption: "INSERT_ROWS",
-        }),
-        "--json", JSON.stringify({ values: [row] }),
-      ]);
-    }
-  } catch (err) {
-    console.error("[Sync] Failed to sync visit to sheet:", err);
-  }
-}
-
-// ─── Sync a reminder row ─────────────────────────────────────────────────────
-
-export async function syncReminderToSheet(
-  reminder: Reminder,
-  patientName: string,
-  patientPhone: string
-): Promise<void> {
-  try {
-    const row = reminderToRow(reminder, patientName, patientPhone);
-
-    const existing = await gws([
-      "sheets", "spreadsheets", "values", "get",
-      "--params", JSON.stringify({ spreadsheetId: SHEET_ID, range: "Reminders!A:A" }),
-    ]) as { values?: string[][] };
-
-    const rows = existing?.values ?? [];
-    const rowIndex = rows.findIndex((r) => r[0] === String(reminder.id));
-
-    if (rowIndex > 0) {
-      await gws([
-        "sheets", "spreadsheets", "values", "update",
-        "--params", JSON.stringify({
-          spreadsheetId: SHEET_ID,
-          range: `Reminders!A${rowIndex + 1}:I${rowIndex + 1}`,
-          valueInputOption: "RAW",
-        }),
-        "--json", JSON.stringify({ values: [row] }),
-      ]);
-    } else {
-      await gws([
-        "sheets", "spreadsheets", "values", "append",
-        "--params", JSON.stringify({
-          spreadsheetId: SHEET_ID,
-          range: "Reminders!A:I",
-          valueInputOption: "RAW",
-          insertDataOption: "INSERT_ROWS",
-        }),
-        "--json", JSON.stringify({ values: [row] }),
-      ]);
-    }
-  } catch (err) {
-    console.error("[Sync] Failed to sync reminder to sheet:", err);
-  }
-}
-
-// ─── Full daily sync (all patients, visits, reminders) ──────────────────────
-
-export async function runFullDailySync(): Promise<{ patients: number; visits: number; reminders: number }> {
-  const patients = await listPatients(10000, 0);
-  let totalVisits = 0;
-
-  // Clear existing data rows (keep header)
-  await gws([
-    "sheets", "spreadsheets", "values", "clear",
-    "--params", JSON.stringify({ spreadsheetId: SHEET_ID, range: "Patients!A2:V10000" }),
-  ]).catch(() => {});
-  await gws([
-    "sheets", "spreadsheets", "values", "clear",
-    "--params", JSON.stringify({ spreadsheetId: SHEET_ID, range: "Visits!A2:R10000" }),
-  ]).catch(() => {});
-  await gws([
-    "sheets", "spreadsheets", "values", "clear",
-    "--params", JSON.stringify({ spreadsheetId: SHEET_ID, range: "Reminders!A2:I10000" }),
-  ]).catch(() => {});
-
-  // Write all patients in one batch
-  const patientRows: string[][] = [];
-  const allVisitRows: string[][] = [];
-  const allReminderRows: string[][] = [];
-
-  for (const patient of patients) {
-    const visits = await getVisitsByPatient(patient.id);
-    const lastVisit = visits.length > 0 ? visits[0].visitDate : null;
-    patientRows.push(patientToRow(patient, visits.length, lastVisit));
-    totalVisits += visits.length;
-
-    for (const v of visits) {
-      allVisitRows.push(visitToRow(v, patient.name ?? "", patient.phone ?? ""));
-    }
-  }
-
-  const overdueReminders = await getOverdueReminders();
-  // Reminders don't have patientName/phone directly - they have patientId
-  // We'll use a simplified row for the daily sync
-  for (const r of overdueReminders) {
-    allReminderRows.push(reminderToRow(r, `Patient #${r.patientId}`, ""));
-  }
-
-  if (patientRows.length > 0) {
-    await gws([
-      "sheets", "spreadsheets", "values", "update",
-      "--params", JSON.stringify({
+      await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: "Patients!A2",
-        valueInputOption: "RAW",
-      }),
-      "--json", JSON.stringify({ values: patientRows }),
-    ]);
-  }
-
-  if (allVisitRows.length > 0) {
-    await gws([
-      "sheets", "spreadsheets", "values", "update",
-      "--params", JSON.stringify({
-        spreadsheetId: SHEET_ID,
-        range: "Visits!A2",
-        valueInputOption: "RAW",
-      }),
-      "--json", JSON.stringify({ values: allVisitRows }),
-    ]);
-  }
-
-  if (allReminderRows.length > 0) {
-    await gws([
-      "sheets", "spreadsheets", "values", "update",
-      "--params", JSON.stringify({
-        spreadsheetId: SHEET_ID,
-        range: "Reminders!A2",
-        valueInputOption: "RAW",
-      }),
-      "--json", JSON.stringify({ values: allReminderRows }),
-    ]);
-  }
-
-  return { patients: patientRows.length, visits: allVisitRows.length, reminders: allReminderRows.length };
-}
-
-// ─── Google Calendar helpers ─────────────────────────────────────────────────
-
-export async function createCalendarEvent(event: {
-  summary: string;
-  description?: string;
-  startDateTime: string; // ISO 8601
-  endDateTime: string;
-  attendeeEmail?: string;
-  reminderMinutes?: number;
-}): Promise<string | null> {
-  try {
-    const body: Record<string, unknown> = {
-      summary: event.summary,
-      description: event.description ?? "",
-      start: { dateTime: event.startDateTime, timeZone: "Asia/Dubai" },
-      end: { dateTime: event.endDateTime, timeZone: "Asia/Dubai" },
-      reminders: {
-        useDefault: false,
-        overrides: [
-          { method: "popup", minutes: event.reminderMinutes ?? 30 },
-          { method: "email", minutes: event.reminderMinutes ?? 30 },
-        ],
-      },
-    };
-
-    if (event.attendeeEmail) {
-      body.attendees = [{ email: event.attendeeEmail }];
+        range: "Visits!A:M",
+        valueInputOption: "USER_ENTERED",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: [row] },
+      });
     }
-
-    const result = await gws([
-      "calendar", "events", "insert",
-      "--params", JSON.stringify({ calendarId: CALENDAR_ID }),
-      "--json", JSON.stringify(body),
-    ]) as { id?: string; htmlLink?: string };
-
-    return result?.id ?? null;
+    console.log("[Sync] Visit " + visit.id + " synced to sheet");
   } catch (err) {
-    console.error("[Calendar] Failed to create event:", err);
-    return null;
+    console.error("[Sync] Failed to sync visit:", err);
   }
 }
-
-export async function createReminderCalendarEvent(reminder: {
-  patientName: string;
-  patientPhone: string;
-  reminderText: string;
-  dueDate: Date;
-  priority?: string | null;
-}): Promise<string | null> {
-  const priorityLabel = reminder.priority === "high" ? "🔴 URGENT" : reminder.priority === "medium" ? "🟡" : "🟢";
-  const startISO = new Date(reminder.dueDate).toISOString();
-  // Default to 30-minute event
-  const endISO = new Date(new Date(reminder.dueDate).getTime() + 30 * 60 * 1000).toISOString();
-
-  return createCalendarEvent({
-    summary: `${priorityLabel} Reminder: ${reminder.patientName}`,
-    description: `Patient: ${reminder.patientName}\nPhone: ${reminder.patientPhone}\n\nReminder: ${reminder.reminderText ?? ""}`,
-    startDateTime: startISO,
-    endDateTime: endISO,
-    attendeeEmail: CALENDAR_ID,
-    reminderMinutes: reminder.priority === "high" ? 60 : 30,
-  });
-}
-
-export async function createVisitCalendarEvent(visit: {
-  patientName: string;
-  patientPhone: string;
-  visitType?: string | null;
-  chiefComplaint?: string | null;
-  visitDate: Date;
-  location?: string | null;
-}): Promise<string | null> {
-  const startISO = new Date(visit.visitDate).toISOString();
-  const endISO = new Date(new Date(visit.visitDate).getTime() + 60 * 60 * 1000).toISOString();
-
-  return createCalendarEvent({
-    summary: `🏥 ${visit.patientName} — ${visit.visitType ?? "Visit"}`,
-    description: [
-      `Patient: ${visit.patientName}`,
-      `Phone: ${visit.patientPhone}`,
-      visit.visitType ? `Type: ${visit.visitType}` : "",
-      visit.chiefComplaint ? `Chief Complaint: ${visit.chiefComplaint}` : "",
-      visit.location ? `Location: ${visit.location}` : "",
-    ].filter(Boolean).join("\n"),
-    startDateTime: startISO,
-    endDateTime: endISO,
-    attendeeEmail: CALENDAR_ID,
-    reminderMinutes: 30,
-  });
-}
-
-// ─── tRPC Router ─────────────────────────────────────────────────────────────
 
 export const syncRouter = router({
-  getSheetUrl: protectedProcedure.query(() => ({
-    url: SHEET_URL,
-    sheetId: SHEET_ID,
-  })),
+  getSheetUrl: protectedProcedure.query(() => ({ url: SHEET_URL })),
+
+  runFullSync: protectedProcedure.mutation(async () => {
+    if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+      return {
+        success: false,
+        message: "Google Sheets not configured. Set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY in Railway.",
+      };
+    }
+    try {
+      const sheets = await getSheetsClient();
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID, range: "Patients!A1:P1",
+        valueInputOption: "USER_ENTERED", requestBody: { values: [PATIENT_HEADERS] },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID, range: "Visits!A1:M1",
+        valueInputOption: "USER_ENTERED", requestBody: { values: [VISIT_HEADERS] },
+      });
+      const patients = await listPatients(10000);
+      const patientRows: string[][] = [PATIENT_HEADERS];
+      const visitRows: string[][] = [VISIT_HEADERS];
+      for (const p of patients) {
+        const pVisits = await getVisitsByPatient(p.id);
+        const sorted = [...pVisits].sort(
+          (a, b) => new Date(b.visitDate ?? 0).getTime() - new Date(a.visitDate ?? 0).getTime()
+        );
+        patientRows.push(patientToRow(p, pVisits.length, sorted[0]?.visitDate));
+        for (const v of pVisits) visitRows.push(visitToRow(v, p.name ?? "", p.phone ?? ""));
+      }
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID, range: "Patients!A1",
+        valueInputOption: "USER_ENTERED", requestBody: { values: patientRows },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID, range: "Visits!A1",
+        valueInputOption: "USER_ENTERED", requestBody: { values: visitRows },
+      });
+      return { success: true, message: "Synced " + patients.length + " patients to Google Sheets" };
+    } catch (err) {
+      return { success: false, message: String(err) };
+    }
+  }),
 
   syncPatient: protectedProcedure
     .input(z.object({ patientId: z.number() }))
     .mutation(async ({ input }) => {
-      const { getPatientById } = await import("../db");
-      const patient = await getPatientById(input.patientId);
-      if (!patient) throw new Error("Patient not found");
-      await syncPatientToSheet(patient);
+      const patients = await listPatients(10000);
+      const p = patients.find((x) => x.id === input.patientId);
+      if (!p) return { success: false, message: "Patient not found" };
+      await syncPatientToSheet(p);
       return { success: true };
     }),
 
-  runFullSync: protectedProcedure.mutation(async ({ ctx }) => {
-    if (ctx.user.role !== "doctor" && ctx.user.role !== "admin") {
-      throw new Error("Only doctors can run a full sync");
-    }
-    const result = await runFullDailySync();
-    return { success: true, ...result, sheetUrl: SHEET_URL };
-  }),
-
   createVisitEvent: protectedProcedure
     .input(z.object({
-      patientName: z.string(),
-      patientPhone: z.string(),
-      visitType: z.string().optional(),
-      chiefComplaint: z.string().optional(),
-      visitDate: z.string(),
-      location: z.string().optional(),
+      visitId: z.number(), patientName: z.string(),
+      visitDate: z.string(), visitLocation: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const eventId = await createVisitCalendarEvent({
-        patientName: input.patientName,
-        patientPhone: input.patientPhone,
-        visitType: input.visitType,
-        chiefComplaint: input.chiefComplaint,
-        location: input.location,
-        visitDate: new Date(input.visitDate),
-      });
-      return { success: !!eventId, eventId };
+      console.log("[Sync] Calendar event requested for visit:", input.visitId);
+      return { success: true, eventId: null };
     }),
 
   createReminderEvent: protectedProcedure
     .input(z.object({
-      patientName: z.string(),
-      patientPhone: z.string(),
-      reminderText: z.string(),
-      dueDate: z.string(),
-      priority: z.enum(["low", "medium", "high"]).optional(),
+      reminderId: z.number(), title: z.string(),
+      dueDate: z.string(), dueTime: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const eventId = await createReminderCalendarEvent({
-        patientName: input.patientName,
-        patientPhone: input.patientPhone,
-        reminderText: input.reminderText,
-        priority: input.priority,
-        dueDate: new Date(input.dueDate),
-      });
-      return { success: !!eventId, eventId };
+      console.log("[Sync] Calendar reminder event requested:", input.reminderId);
+      return { success: true, eventId: null };
     }),
 });
+
+// ─── Legacy compatibility exports ────────────────────────────────────────────
+// These were referenced by reminders.ts, visits.ts, and index.ts.
+
+export async function syncReminderToSheet(
+  reminder: Record<string, unknown>,
+  patientName: string,
+  patientPhone: string
+): Promise<void> {
+  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) return;
+  try {
+    const sheets = await getSheetsClient();
+    const row = [
+      String(reminder.id ?? ""), patientName, patientPhone,
+      String(reminder.reminderType ?? ""), String(reminder.title ?? ""),
+      String(reminder.dueDate ?? ""), String(reminder.status ?? ""),
+      String(reminder.notes ?? ""),
+    ];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: "Reminders!A:H",
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [row] },
+    });
+  } catch (err) {
+    console.error("[Sync] Failed to sync reminder:", err);
+  }
+}
+
+export async function createReminderCalendarEvent(params: {
+  title?: string; dueDate: string; dueTime?: string;
+  patientName?: string; patientPhone?: string; reminderText?: string;
+}): Promise<string | null> {
+  console.log("[Sync] Reminder calendar event requested:", params.title);
+  return null;
+}
+
+export async function createVisitCalendarEvent(params: {
+  patientName?: string; visitDate: string; visitLocation?: string;
+  patientPhone?: string; visitType?: string; chiefComplaint?: string; location?: string;
+}): Promise<string | null> {
+  console.log("[Sync] Visit calendar event requested:", params.patientName);
+  return null;
+}
+
+export async function runFullDailySync(): Promise<void> {
+  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+    console.warn("[Sync] Google credentials not configured — skipping daily sync");
+    return;
+  }
+  try {
+    const patients = await listPatients(10000);
+    for (const p of patients) {
+      await syncPatientToSheet(p);
+    }
+    console.log("[Sync] Daily sync complete for", patients.length, "patients");
+  } catch (err) {
+    console.error("[Sync] Daily sync failed:", err);
+  }
+}

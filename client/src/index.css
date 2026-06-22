@@ -11,56 +11,69 @@
   --radius-xl: 1.25rem;
   --radius-2xl: 1.75rem;
 
-  /* Medical Feminine Luxury Palette */
-  --color-background: oklch(0.985 0.005 300);
-  --color-foreground: oklch(0.18 0.02 270);
-  --color-card: oklch(0.995 0.003 300);
-  --color-card-foreground: oklch(0.18 0.02 270);
-  --color-popover: oklch(0.995 0.003 300);
-  --color-popover-foreground: oklch(0.18 0.02 270);
+  /* ─── Dr. Rania Clinic — Harmonious Medical Luxury Palette ─────────────────
+   *
+   * Five-tone system, all perceptually harmonious in OKLCH:
+   *   Primary   — Deep teal-emerald   (medical trust, precision)
+   *   Secondary — Blush rose          (femininity, warmth)
+   *   Accent    — Warm champagne-gold (luxury, premium feel)
+   *   Success   — Sage mint           (health, positivity)
+   *   Sidebar   — Midnight navy-teal  (authority, confidence)
+   *
+   * Colors are drawn from the Dr. Rania Mousa Clinic logo:
+   * the rose-gold frame, silver-teal interior, and the teal hijab.
+   * ────────────────────────────────────────────────────────────────────────── */
 
-  /* Rose-mauve primary */
-  --color-primary: oklch(0.52 0.16 0);
-  --color-primary-foreground: oklch(0.98 0.005 0);
+  /* Page background — near-white with the faintest aqua warmth */
+  --color-background: oklch(0.982 0.006 195);
+  --color-foreground: oklch(0.16 0.025 220);
+  --color-card: oklch(0.997 0.003 195);
+  --color-card-foreground: oklch(0.16 0.025 220);
+  --color-popover: oklch(0.997 0.003 195);
+  --color-popover-foreground: oklch(0.16 0.025 220);
 
-  /* Soft lavender secondary */
-  --color-secondary: oklch(0.93 0.03 290);
-  --color-secondary-foreground: oklch(0.35 0.05 290);
+  /* Primary — deep teal-emerald (main buttons, links, active states) */
+  --color-primary: oklch(0.45 0.14 195);
+  --color-primary-foreground: oklch(0.98 0.005 195);
 
-  /* Muted rose-grey */
-  --color-muted: oklch(0.94 0.01 300);
-  --color-muted-foreground: oklch(0.52 0.02 290);
+  /* Secondary — blush rose (soft fills, secondary buttons) */
+  --color-secondary: oklch(0.93 0.035 10);
+  --color-secondary-foreground: oklch(0.38 0.08 10);
 
-  /* Warm blush accent */
-  --color-accent: oklch(0.92 0.04 10);
-  --color-accent-foreground: oklch(0.35 0.08 10);
+  /* Muted — warm grey-teal for subdued surfaces */
+  --color-muted: oklch(0.93 0.012 195);
+  --color-muted-foreground: oklch(0.50 0.025 195);
+
+  /* Accent — champagne gold (premium highlights, hover states) */
+  --color-accent: oklch(0.88 0.07 85);
+  --color-accent-foreground: oklch(0.28 0.06 85);
 
   /* Destructive */
   --color-destructive: oklch(0.55 0.22 25);
   --color-destructive-foreground: oklch(0.98 0.005 0);
 
   /* Borders */
-  --color-border: oklch(0.88 0.015 290);
-  --color-input: oklch(0.88 0.015 290);
-  --color-ring: oklch(0.52 0.16 0);
+  --color-border: oklch(0.87 0.018 195);
+  --color-input: oklch(0.87 0.018 195);
+  --color-ring: oklch(0.45 0.14 195);
 
-  /* Status colors */
-  --color-success: oklch(0.55 0.15 145);
-  --color-success-foreground: oklch(0.98 0.005 145);
-  --color-warning: oklch(0.72 0.16 70);
-  --color-warning-foreground: oklch(0.2 0.04 70);
-  --color-info: oklch(0.55 0.15 220);
-  --color-info-foreground: oklch(0.98 0.005 220);
+  /* Status colors — distinct and harmonious */
+  --color-success: oklch(0.55 0.14 160);          /* sage mint */
+  --color-success-foreground: oklch(0.98 0.005 160);
+  --color-warning: oklch(0.74 0.15 75);            /* warm amber */
+  --color-warning-foreground: oklch(0.22 0.04 75);
+  --color-info: oklch(0.55 0.14 230);              /* soft blue */
+  --color-info-foreground: oklch(0.98 0.005 230);
 
-  /* Sidebar */
-  --color-sidebar: oklch(0.18 0.025 270);
-  --color-sidebar-foreground: oklch(0.88 0.015 290);
-  --color-sidebar-primary: oklch(0.72 0.16 0);
+  /* Sidebar — midnight navy-teal, draws from the logo's metallic frame */
+  --color-sidebar: oklch(0.16 0.04 210);
+  --color-sidebar-foreground: oklch(0.88 0.02 195);
+  --color-sidebar-primary: oklch(0.72 0.12 10);   /* rose-gold active item */
   --color-sidebar-primary-foreground: oklch(0.98 0.005 0);
-  --color-sidebar-accent: oklch(0.25 0.03 270);
-  --color-sidebar-accent-foreground: oklch(0.88 0.015 290);
-  --color-sidebar-border: oklch(0.28 0.025 270);
-  --color-sidebar-ring: oklch(0.72 0.16 0);
+  --color-sidebar-accent: oklch(0.22 0.04 210);
+  --color-sidebar-accent-foreground: oklch(0.88 0.02 195);
+  --color-sidebar-border: oklch(0.26 0.04 210);
+  --color-sidebar-ring: oklch(0.72 0.12 10);
 
   /* Typography */
   --font-sans: "Inter", system-ui, sans-serif;

@@ -71,28 +71,48 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-semibold text-foreground">
-            {greeting}, {user?.name?.split(" ")[0] ?? "Doctor"} 👋
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
+      {/* Hero Header */}
+      <div
+        className="relative rounded-2xl overflow-hidden shadow-lg"
+        style={{
+          backgroundImage: "url('/bg-hero.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          minHeight: "140px",
+        }}
+      >
+        {/* Overlay for text legibility */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[oklch(0.16_0.04_210/0.92)] via-[oklch(0.16_0.04_210/0.75)] to-transparent" />
+        <div className="relative z-10 flex items-center justify-between p-6">
+          <div className="flex items-center gap-4">
+            <img
+              src="/logo.png"
+              alt="Dr. Rania Mousa Clinic"
+              className="h-16 w-16 rounded-full object-cover ring-2 ring-white/30 shadow-lg shrink-0"
+            />
+            <div>
+              <h1 className="text-2xl font-display font-semibold text-white">
+                {greeting}, {user?.name?.split(" ")[0] ?? "Doctor"} 👋
+              </h1>
+              <p className="text-sm text-white/70 mt-1">
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+              <p className="text-xs text-white/50 mt-0.5">Dr. Rania Mousa Clinic — Gynecology & Obstetrics</p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setLocation("/patients/new")}
+            className="gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm"
+          >
+            <Plus className="h-4 w-4" />
+            New Patient
+          </Button>
         </div>
-        <Button
-          onClick={() => setLocation("/patients/new")}
-          className="gap-2 rounded-xl"
-        >
-          <Plus className="h-4 w-4" />
-          New Patient
-        </Button>
       </div>
 
       {/* Stats Grid */}
