@@ -99,7 +99,7 @@ export const remindersRouter = router({
           patientName: p.name,
           patientPhone: p.phone,
           reminderText: input.title,
-          dueDate: new Date(input.dueDate),
+          dueDate: input.dueDate,
         }).catch(() => {});
         sendTelegramAlert(
           `🔔 *New Reminder*\n👤 ${p.name} (${p.phone})\n📋 ${input.title}\n📅 Due: ${input.dueDate}\n🏷️ Type: ${input.reminderType}`

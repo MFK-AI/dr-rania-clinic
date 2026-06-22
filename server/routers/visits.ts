@@ -101,7 +101,7 @@ export const visitsRouter = router({
           visitType: input.visitType ?? "Consultation",
           chiefComplaint: input.reasonForVisit,
           location: input.visitLocation,
-          visitDate: new Date(input.visitDate),
+          visitDate: input.visitDate,
         }).catch(() => {});
       }).catch(() => {});
       return { id };
