@@ -113,40 +113,34 @@ export async function syncPatientToSheet(patient: Patient): Promise<void> {
   try {
     const sheets = await getSheetsClient();
     const row = patientToRow(patient);
+
+    // Look up patient by ID in column A
     const existing = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID, range: "Patients!A:A",
     });
     const rows = existing.data.values ?? [];
     const rowIndex = rows.findIndex((r) => r[0] === String(patient.id));
-    if (rowIndex >= 0) {
+
+    if (rowIndex >= 1) {
+      // Row found (skip row 0 which is headers): update in-place
       const sheetRow = rowIndex + 1;
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
-        range: "Patients!A" + sheetRow + ":P" + sheetRow,
+        range: `Patients!A${sheetRow}:P${sheetRow}`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values: [row] },
       });
     } else {
-      // Ensure header row exists (row 1 should always be the header)
-      if (rows.length === 0) {
-        await sheets.spreadsheets.values.append({
-          spreadsheetId: SHEET_ID,
-          range: "Patients!A:P",
-          valueInputOption: "USER_ENTERED",
-          insertDataOption: "INSERT_ROWS",
-          requestBody: { values: [PATIENT_HEADERS, row] },
+      // Patient not yet in sheet — guarantee header row, then append data only.
+      // NEVER write headers mid-sheet; run Full Sync if column order needs reset.
+      if (rows.length === 0 || rows[0]?.[0] !== "ID") {
+        // Empty sheet or corrupted — write header first, then data
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID, range: "Patients!A1",
+          valueInputOption: "USER_ENTERED", requestBody: { values: [PATIENT_HEADERS, row] },
         });
       } else {
-        // Check if row 1 is actually a header (not a data row)
-        const firstRow = rows[0];
-        const isHeaderRow = firstRow && firstRow[0] === "ID";
-        if (!isHeaderRow) {
-          // Sheet has data but no header - prepend header row by doing a full reset
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: SHEET_ID, range: "Patients!A1:P1",
-            valueInputOption: "USER_ENTERED", requestBody: { values: [PATIENT_HEADERS] },
-          });
-        }
+        // Normal: just append the data row after existing rows
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
           range: "Patients!A:P",

@@ -10,7 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   Eye, EyeOff, KeyRound, Lock, LogOut, MessageCircle,
-  Palette, Plus, Settings, Shield, UserCircle, Users,
+  Palette, Plus, RefreshCw, Settings, Shield, Sheet, UserCircle, Users,
 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -94,6 +94,15 @@ export default function AdminSettings() {
     setActiveTheme(id);
     toast.success(`Theme changed to ${t.label}`);
   }
+
+  // ── Full Sync ────────────────────────────────────────────────────────────
+  const runFullSync = trpc.sync.runFullSync.useMutation({
+    onSuccess: (result) => {
+      if (result.success) toast.success(result.message ?? "Google Sheets rebuilt successfully");
+      else toast.error(result.message ?? "Sync failed");
+    },
+    onError: (err: { message: string }) => toast.error("Sync failed: " + err.message),
+  });
 
   const isDoctor = user?.role === "doctor" || user?.role === "admin";
 
@@ -189,6 +198,37 @@ export default function AdminSettings() {
           <p className="text-xs text-muted-foreground mt-3">Theme is saved in your browser. Each device remembers its own preference.</p>
         </CardContent>
       </Card>
+
+      {/* ── Google Sheets Sync ───────────────────────────────────────────── */}
+      {isDoctor && (
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Sheet className="h-3.5 w-3.5" />Google Sheets Sync
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              If patient data is showing in wrong columns, run Full Sync.
+              This clears the entire sheet and rebuilds it from the database with the correct column order.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => runFullSync.mutate()}
+                disabled={runFullSync.isPending}
+                variant="outline"
+                className="gap-2"
+              >
+                <RefreshCw className={"h-4 w-4 " + (runFullSync.isPending ? "animate-spin" : "")} />
+                {runFullSync.isPending ? "Rebuilding sheet…" : "Run Full Sync"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Takes ~10 seconds. Do not close the page.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Change Password ───────────────────────────────────────────────── */}
       <Card className="border shadow-sm">
