@@ -23,18 +23,35 @@ export const SHEET_ID = ENV.googleSheetId;
 export const SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit";
 export const CALENDAR_ID = "dr.raniakhalil83@gmail.com";
 
-function getGoogleAuth() {
-  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
-    throw new Error(
-      "Google Sheets sync not configured. " +
-      "Add GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY to Railway environment variables."
-    );
+function getGoogleCredentials(): { client_email: string; private_key: string } {
+  // Primary: decode the full service account JSON from base64.
+  // This avoids all PEM newline/special-character encoding issues in env vars.
+  if (ENV.googleServiceAccountB64) {
+    try {
+      const json = JSON.parse(
+        Buffer.from(ENV.googleServiceAccountB64, "base64").toString("utf8")
+      ) as { client_email: string; private_key: string };
+      if (json.client_email && json.private_key) {
+        return { client_email: json.client_email, private_key: json.private_key };
+      }
+    } catch (err) {
+      console.error("[Sync] Failed to decode GOOGLE_SERVICE_ACCOUNT_B64:", err);
+    }
   }
+  // Fallback: separate env vars (legacy)
+  if (ENV.googleClientEmail && ENV.googlePrivateKey) {
+    return { client_email: ENV.googleClientEmail, private_key: ENV.googlePrivateKey };
+  }
+  throw new Error(
+    "Google credentials not configured. " +
+    "Set GOOGLE_SERVICE_ACCOUNT_B64 in Railway (base64 of the full service account JSON)."
+  );
+}
+
+function getGoogleAuth() {
+  const creds = getGoogleCredentials();
   return new google.auth.GoogleAuth({
-    credentials: {
-      client_email: ENV.googleClientEmail,
-      private_key: ENV.googlePrivateKey,
-    },
+    credentials: creds,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 }
@@ -89,7 +106,7 @@ const VISIT_HEADERS = [
 ];
 
 export async function syncPatientToSheet(patient: Patient): Promise<void> {
-  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+  if (!ENV.googleServiceAccountB64 && (!ENV.googleClientEmail || !ENV.googlePrivateKey)) {
     console.warn("[Sync] Google credentials not configured -- skipping sheet sync");
     return;
   }
@@ -127,7 +144,7 @@ export async function syncPatientToSheet(patient: Patient): Promise<void> {
 export async function syncVisitToSheet(
   visit: Visit, patientName: string, patientPhone: string
 ): Promise<void> {
-  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) return;
+  if (!ENV.googleServiceAccountB64 && (!ENV.googleClientEmail || !ENV.googlePrivateKey)) return;
   try {
     const sheets = await getSheetsClient();
     const row = visitToRow(visit, patientName, patientPhone);
@@ -163,10 +180,10 @@ export const syncRouter = router({
   getSheetUrl: protectedProcedure.query(() => ({ url: SHEET_URL })),
 
   runFullSync: protectedProcedure.mutation(async () => {
-    if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
+    if (!ENV.googleServiceAccountB64 && (!ENV.googleClientEmail || !ENV.googlePrivateKey)) {
       return {
         success: false,
-        message: "Google Sheets not configured. Set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY in Railway.",
+        message: "Google Sheets not configured. Set GOOGLE_SERVICE_ACCOUNT_B64 in Railway.",
       };
     }
     try {
@@ -243,7 +260,7 @@ export async function syncReminderToSheet(
   patientName: string,
   patientPhone: string
 ): Promise<void> {
-  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) return;
+  if (!ENV.googleServiceAccountB64 && (!ENV.googleClientEmail || !ENV.googlePrivateKey)) return;
   try {
     const sheets = await getSheetsClient();
     const row = [
@@ -268,16 +285,10 @@ export async function createReminderCalendarEvent(params: {
   title?: string; dueDate: string; dueTime?: string;
   patientName?: string; patientPhone?: string; reminderText?: string;
 }): Promise<string | null> {
-  if (!ENV.googleClientEmail || !ENV.googlePrivateKey) {
-    console.warn("[Sync] Google credentials not configured -- skipping calendar event");
-    return null;
-  }
   try {
+    const creds = getGoogleCredentials();
     const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: ENV.googleClientEmail,
-        private_key: ENV.googlePrivateKey,
-      },
+      credentials: creds,
       scopes: [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/calendar",
