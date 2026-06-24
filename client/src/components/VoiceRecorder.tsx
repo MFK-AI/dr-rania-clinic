@@ -258,52 +258,26 @@ export default function VoiceRecorder({
     setState("uploading");
     setUploadProgress(0);
 
-    // Determine file extension from mimeType
-    const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "m4a" : "webm";
-    const fileKey = `voice-notes/${Date.now()}_recording.${ext}`;
-
     try {
-      // Upload via XHR so we can track progress.
-      // BUGFIX: this previously sent the raw blob as the request body with
-      // a manually-set Content-Type header (audio/webm etc). The server's
-      // upload endpoint uses busboy, which only parses multipart/form-data
-      // -- a raw binary body with a non-multipart content-type means
-      // busboy never finds a "file" part at all, failing with "No file
-      // found in upload" before transcription is ever reached. Sending a
-      // real FormData body (and NOT manually setting Content-Type, so the
-      // browser can attach the correct multipart boundary) matches the
-      // same pattern the working image upload already uses.
-      const uploadedUrl = await new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `/api/storage/upload?fileKey=${encodeURIComponent(fileKey)}`);
-        const formData = new FormData();
-        formData.append("file", blob, `recording.${ext}`);
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
+      // Convert audio blob to base64 data URI directly in the browser.
+      // This bypasses the entire S3 → signed URL → server fetch pipeline,
+      // eliminating all storage layer failures as a possible root cause.
+      // The server's transcribeAudio function handles data URIs natively.
+      const audioUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setUploadProgress(100);
+          resolve(reader.result as string);
         };
-        xhr.onload = () => {
-          if (xhr.status === 200) {
-            const data = JSON.parse(xhr.responseText) as { url: string };
-            // BUGFIX: storagePut returns a relative path; transcribeAndExtract's
-            // input schema requires an absolute URL (z.string().url()).
-            resolve(new URL(data.url, window.location.origin).toString());
-          } else {
-            reject(new Error(`Upload failed: ${xhr.statusText}`));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.send(formData);
+        reader.onerror = () => reject(new Error("Failed to read audio file"));
+        reader.readAsDataURL(blob);
       });
 
       setState("processing");
 
-      // Call tRPC transcribeAndExtract
-      // visitDate defaults to today; caller can override via a prop if needed
       const today = new Date().toISOString().split("T")[0]!;
       transcribeAndExtract.mutate({
-        audioUrl: uploadedUrl,
+        audioUrl,
         visitDate: today,
         patientId,
         visitId,

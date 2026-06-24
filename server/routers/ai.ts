@@ -83,6 +83,9 @@ async function resolveAudioUrlForTranscription(
 }
 
 async function resolveImageUrlForLLM(rawUrl: string): Promise<string> {
+  // Fast path: browser already sent a base64 data URI — no storage fetch needed
+  if (rawUrl.startsWith("data:")) return rawUrl;
+
   const marker = "/manus-storage/";
   const idx = rawUrl.indexOf(marker);
   if (idx === -1) return rawUrl; // not an internal storage URL, leave as-is
@@ -216,7 +219,10 @@ export const aiRouter = router({
   transcribeAndExtract: protectedProcedure
     .input(
       z.object({
-        audioUrl: z.string().url(),
+        audioUrl: z.string().refine(
+          (v) => v.startsWith("data:") || v.startsWith("http"),
+          "Must be a data URI or http URL"
+        ),
         visitDate: z.string(),
         visitLocation: z.enum(["Prime Hospital", "Mazher Center"]).optional(),
         patientId: z.number().optional(),
@@ -542,7 +548,10 @@ export const aiRouter = router({
 
   // ── Extract PATIENT data from a screenshot / image ─────────────────────────
   extractPatientFromImage: protectedProcedure
-    .input(z.object({ imageUrl: z.string().url() }))
+    .input(z.object({ imageUrl: z.string().refine(
+        (v) => v.startsWith("data:") || v.startsWith("http"),
+        "Must be a data URI or http URL"
+      ) }))
     .mutation(async ({ ctx, input }) => {
       requireDoctorOrAssistant(ctx.user.role);
       const systemPrompt = `You are a medical data extraction assistant for an OB-GYN clinic.
@@ -761,7 +770,10 @@ Return ONLY a valid JSON array of reminder objects. No explanation. No markdown.
   extractVisitFromImage: protectedProcedure
     .input(
       z.object({
-        imageUrl: z.string().url(),
+        imageUrl: z.string().refine(
+        (v) => v.startsWith("data:") || v.startsWith("http"),
+        "Must be a data URI or http URL"
+      ),
         visitDate: z.string().optional(),
         visitLocation: z.enum(["Prime Hospital", "Mazher Center"]).optional(),
       })
