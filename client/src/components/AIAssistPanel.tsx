@@ -290,19 +290,16 @@ export function AIAssistPanel({ mode, onApply, visitDate, visitLocation }: Props
         fileSize: file.size,
       });
 
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch(
-        `/api/storage/upload?fileKey=${encodeURIComponent(fileKey)}`,
-        { method: "POST", body: formData }
-      );
-      if (!uploadRes.ok) throw new Error("Image upload failed");
-      const { url: rawUrl } = (await uploadRes.json()) as { url: string };
-      // BUGFIX: storagePut returns a relative path ("/manus-storage/...").
-      // extractPatientFromImage / extractVisitFromImage require a fully
-      // qualified URL (z.string().url()), so a relative path fails Zod
-      // validation with "Invalid URL" before the AI ever runs.
-      const imageUrl = new URL(rawUrl, window.location.origin).toString();
+      // Convert image to base64 data URI directly in the browser.
+      // This completely bypasses the S3 storage layer for AI extraction,
+      // eliminating signed-URL expiry, Forge API key issues, and network
+      // fetch errors as failure points. Faster and more reliable.
+      const imageUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read image file"));
+        reader.readAsDataURL(file);
+      });
 
       if (mode === "patient") {
         const result = await extractPatientFromImage.mutateAsync({ imageUrl });

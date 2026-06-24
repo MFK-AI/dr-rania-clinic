@@ -93,21 +93,28 @@ export async function transcribeAudio(
       };
     }
 
-    // Step 2: Download audio from URL
+    // Step 2: Download audio from URL (or decode inline base64 data URI)
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
-      const response = await fetch(options.audioUrl);
-      if (!response.ok) {
-        return {
-          error: "Failed to download audio file",
-          code: "INVALID_FORMAT",
-          details: `HTTP ${response.status}: ${response.statusText}`
-        };
+      if (options.audioUrl.startsWith("data:")) {
+        // Fast path: browser sent base64 — decode directly, no network call needed.
+        // This bypasses all storage/signed-URL dependencies and is more reliable.
+        const [header, b64] = options.audioUrl.split(",", 2);
+        mimeType = options.mimeType || header?.split(":")?.[1]?.split(";")?.[0] || "audio/webm";
+        audioBuffer = Buffer.from(b64 ?? "", "base64");
+      } else {
+        const response = await fetch(options.audioUrl);
+        if (!response.ok) {
+          return {
+            error: "Failed to download audio file",
+            code: "INVALID_FORMAT",
+            details: `HTTP ${response.status}: ${response.statusText}`
+          };
+        }
+        audioBuffer = Buffer.from(await response.arrayBuffer());
+        mimeType = options.mimeType || response.headers.get('content-type') || 'audio/mpeg';
       }
-      
-      audioBuffer = Buffer.from(await response.arrayBuffer());
-      mimeType = options.mimeType || response.headers.get('content-type') || 'audio/mpeg';
       
       // Check file size (16MB limit)
       const sizeMB = audioBuffer.length / (1024 * 1024);
