@@ -14,7 +14,7 @@ import {
 } from "../db";
 import { getDb } from "../db";
 import { syncReminderToSheet, createReminderCalendarEvent } from "./sync";
-import { sendTelegramAlert } from "./telegram";
+import { broadcastTelegramAlert } from "./telegram";
 import { reminders } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -110,10 +110,16 @@ export const remindersRouter = router({
           reminderText: input.title,
           dueDate: input.dueDate,
         }).catch(() => {});
-        sendTelegramAlert(
-          `🔔 *New Reminder*\n👤 ${p.name} (${p.phone})\n📋 ${input.title}\n📅 Due: ${input.dueDate}\n🏷️ Type: ${input.reminderType}`
+        // ── Telegram: broadcast HTML alert to Dr. Rania + every active staff
+        //    member who has a telegramChatId set in the DB.
+        broadcastTelegramAlert(
+          `🔔 <b>New Reminder Created</b>\n\n` +
+          `👤 <b>${p.name}</b> (${p.phone})\n` +
+          `📋 ${input.title}\n` +
+          `📅 Due: <b>${input.dueDate}</b>${input.dueTime ? ` at ${input.dueTime}` : ""}\n` +
+          `🏷️ ${input.reminderType.replace(/_/g, " ")}`
         ).catch(() => {});
-        // Send targeted notification to specific staff members if requested
+        // Additionally send a targeted message to any explicitly requested staff
         if (input.notifyUserIds && input.notifyUserIds.length > 0) {
           const botToken = process.env.TELEGRAM_BOT_TOKEN;
           if (botToken) {
@@ -126,8 +132,8 @@ export const remindersRouter = router({
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       chat_id: staffUser.telegramChatId,
-                      text: `🔔 *Reminder Assigned to You*\n👤 ${p.name} (${p.phone})\n📋 ${input.title}\n📅 Due: ${input.dueDate}\n🏷️ ${input.reminderType.replace(/_/g, " ")}\n\nOpen the clinic app for full details.`,
-                      parse_mode: "Markdown",
+                      text: `🔔 <b>Reminder Assigned to You</b>\n\n👤 <b>${p.name}</b> (${p.phone})\n📋 ${input.title}\n📅 Due: <b>${input.dueDate}</b>\n🏷️ ${input.reminderType.replace(/_/g, " ")}\n\nOpen the clinic app for full details.`,
+                      parse_mode: "HTML",
                     }),
                   }).catch(() => {});
                 }
@@ -227,12 +233,12 @@ export const remindersRouter = router({
         console.error("[reminders.sendToCalendar] Calendar failed:", err instanceof Error ? err.message : err);
         return null;
       });
-      // Fire Telegram
-      await sendTelegramAlert(
-        "🔔 *Reminder Approved for Calendar*\n" +
-        (patient ? "👤 " + patient.name + " (" + patient.phone + ")\n" : "") +
-        "📋 " + (reminder.title ?? "Follow-up") + "\n" +
-        "📅 Due: " + (reminder.dueDate ?? "TBD") + "\n" +
+      // Fire Telegram — broadcast HTML to Dr. Rania + all staff with Telegram IDs
+      await broadcastTelegramAlert(
+        "🔔 <b>Reminder Approved for Calendar</b>\n\n" +
+        (patient ? `👤 <b>${patient.name}</b> (${patient.phone})\n` : "") +
+        `📋 ${reminder.title ?? "Follow-up"}\n` +
+        `📅 Due: <b>${reminder.dueDate ?? "TBD"}</b>\n` +
         "✅ Approved — open the clinic app for full details."
       ).catch(() => {});
       await logAuditEvent({

@@ -265,3 +265,42 @@ export const telegramRouter = router({
 export async function sendTelegramAlert(message: string): Promise<boolean> {
   return sendTelegramMessage(message);
 }
+
+// ─── Broadcast to ALL active staff with Telegram configured ─────────────────
+// Sends the same HTML-formatted message to:
+//   1. The primary TELEGRAM_CHAT_ID env var (Dr. Rania's main channel)
+//   2. Every active user whose telegramChatId column is set in the DB
+// Chat IDs are deduplicated so no one receives the message twice.
+// All sends run in parallel — one failing recipient never blocks others.
+export async function broadcastTelegramAlert(message: string): Promise<void> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const mainChatId = process.env.TELEGRAM_CHAT_ID;
+  if (!botToken) return;
+
+  // Build deduplicated set of chat IDs
+  const chatIds = new Set<string>();
+  if (mainChatId) chatIds.add(mainChatId);
+
+  try {
+    const allUsers = await getAllUsers();
+    for (const u of allUsers) {
+      if (u.isActive && u.telegramChatId) chatIds.add(u.telegramChatId);
+    }
+  } catch {
+    // DB unavailable — fall through with just the primary chat ID
+  }
+
+  // Send to all recipients simultaneously
+  await Promise.allSettled(
+    Array.from(chatIds).map((chatId) =>
+      fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: "HTML" }),
+      }).catch(() => null)
+    )
+  );
+
+  // Log to audit table (best-effort, non-blocking)
+  logTelegramAlert("instant", message, true).catch(() => {});
+}
