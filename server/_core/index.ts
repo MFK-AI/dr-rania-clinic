@@ -158,7 +158,8 @@ async function startServer() {
       const result = await runFullDailySync();
       // Send Telegram daily summary
       const summary = await formatDailySummary();
-      await sendTelegramMessage(summary, "Markdown");
+      // formatDailySummary() returns HTML-tagged text (<b>, <i>) — must use HTML parse mode
+      await sendTelegramMessage(summary, "HTML");
       return res.json({ ok: true, synced: result });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

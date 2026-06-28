@@ -101,8 +101,9 @@ function DashboardLayoutContent({
   const isDoctor = user?.role === "doctor" || user?.role === "admin";
 
   const activeItem =
-    [...menuItems, settingsItem, ...adminMenuItems].find((i) => i.path === location) ??
-    menuItems[0];
+    [...menuItems, settingsItem, ...adminMenuItems].find((i) =>
+      i.path === "/" ? location === "/" : location.startsWith(i.path)
+    ) ?? menuItems[0];
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);

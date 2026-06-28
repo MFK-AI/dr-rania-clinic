@@ -15,5 +15,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    // JWT_SECRET must be present before auth.ts module loads (it throws on import if missing)
+    env: {
+      JWT_SECRET: "test-secret-for-vitest-only-not-used-in-production",
+      NODE_ENV: "test",
+    },
   },
 });

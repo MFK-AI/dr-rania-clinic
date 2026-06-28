@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, Stethoscope, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -18,7 +18,6 @@ export default function Login() {
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
-      // Refetch auth.me so AuthGate sees the user before we navigate
       await utils.auth.me.refetch();
       navigate("/");
     },
@@ -37,40 +36,67 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-pink-50 to-purple-50 px-4">
-      {/* Decorative background circles */}
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{
+        background: "linear-gradient(135deg, oklch(0.96 0.015 195) 0%, oklch(0.97 0.01 10) 50%, oklch(0.96 0.012 85) 100%)",
+      }}
+    >
+      {/* Decorative blobs — use design system colours */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-rose-100/40 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-purple-100/40 blur-3xl" />
+        <div
+          className="absolute -top-32 -right-32 w-96 h-96 rounded-full blur-3xl"
+          style={{ background: "oklch(0.45 0.14 195 / 0.08)" }}
+        />
+        <div
+          className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full blur-3xl"
+          style={{ background: "oklch(0.72 0.12 10 / 0.10)" }}
+        />
       </div>
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-sm animate-slide-in">
         {/* Logo / Brand */}
         <div className="text-center mb-8 space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-rose-600 shadow-lg shadow-rose-200 mx-auto">
-            <Stethoscope className="w-8 h-8 text-white" />
+          <div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mx-auto shadow-lg"
+            style={{
+              background: "var(--color-primary)",
+              boxShadow: "0 8px 24px oklch(0.45 0.14 195 / 0.30)",
+            }}
+          >
+            {/* Clinic logo if available, otherwise fallback monogram */}
+            <img
+              src="/logo.png"
+              alt="Dr. Rania Mousa Clinic"
+              className="w-10 h-10 rounded-xl object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+                (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute("hidden");
+              }}
+            />
+            <span hidden className="text-xl font-display font-bold text-primary-foreground">R</span>
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+            <h1 className="text-2xl font-display font-semibold text-foreground tracking-tight">
               Dr. Rania Khalil
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-muted-foreground mt-0.5">
               Patient Intelligence Assistant
             </p>
           </div>
         </div>
 
-        <Card className="border-0 shadow-xl shadow-gray-200/60 bg-white/90 backdrop-blur-sm">
+        <Card className="border border-border shadow-xl bg-card/90 backdrop-blur-sm">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg text-gray-800">Sign in</CardTitle>
-            <CardDescription className="text-gray-500 text-sm">
+            <CardTitle className="text-lg text-foreground">Sign in</CardTitle>
+            <CardDescription className="text-muted-foreground text-sm">
               Authorized clinic staff only
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="email" className="text-sm font-medium text-foreground">
                   Email address
                 </Label>
                 <Input
@@ -81,12 +107,12 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loginMutation.isPending}
-                  className="h-10 bg-gray-50 border-gray-200 focus:border-rose-400 focus:ring-rose-400/20"
+                  className="h-10 bg-muted/40 border-input focus:border-ring"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="password" className="text-sm font-medium text-foreground">
                   Password
                 </Label>
                 <div className="relative">
@@ -98,13 +124,14 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loginMutation.isPending}
-                    className="h-10 pr-10 bg-gray-50 border-gray-200 focus:border-rose-400 focus:ring-rose-400/20"
+                    className="h-10 pr-10 bg-muted/40 border-input focus:border-ring"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -114,7 +141,7 @@ export default function Login() {
               <Button
                 type="submit"
                 disabled={loginMutation.isPending}
-                className="w-full h-10 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg transition-all active:scale-[0.98]"
+                className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-all"
               >
                 {loginMutation.isPending ? (
                   <>
@@ -129,7 +156,7 @@ export default function Login() {
           </CardContent>
         </Card>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
+        <p className="text-center text-xs text-muted-foreground mt-6">
           drmousa.clinic · Secure Medical Records System
         </p>
       </div>
